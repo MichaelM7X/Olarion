@@ -52,21 +52,29 @@ Respond in this exact JSON format:
 
     const conf = String(item.confidence ?? "medium");
 
+    const reasoning = String(item.reasoning || "LLM detected temporal leakage risk.");
+    const featureName = String(item.feature_name ?? "unknown");
+
     findings.push({
-      id: `temporal-${String(item.feature_name ?? "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
-      title: `${item.feature_name} may use future data`,
+      id: `temporal-${featureName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+      title: `${featureName} may use future data`,
       macro_bucket: "Time leakage",
       fine_grained_type: "temporal",
       severity: conf === "high" ? "high" : "medium",
       confidence: conf as AuditFinding["confidence"],
-      flagged_object: String(item.feature_name),
+      flagged_object: featureName,
       evidence: [
-        String(item.reasoning ?? "LLM detected temporal leakage risk."),
+        {
+          text: reasoning,
+          source_type: "llm_reasoning" as const,
+          citation_label: "LLM semantic analysis",
+          citation_detail: reasoning,
+        },
       ],
       why_it_matters:
         "Features computed with future data make the model appear accurate but fail in production.",
       fix_recommendation: [
-        `Recompute ${item.feature_name} using only data available at the prediction time point.`,
+        `Recompute ${featureName} using only data available at the prediction time point.`,
       ],
       needs_human_review: conf !== "high",
     });

@@ -19,7 +19,7 @@ import { AmbientBackground } from '../components/AmbientBackground';
 import { FloatingChat } from '../components/FloatingChat';
 import { Navigation } from '../components/Navigation';
 import { Footer } from '../components/Footer';
-import type { AuditFinding, AuditReport, AuditRequest, Severity } from '../../types';
+import type { AuditFinding, AuditReport, AuditRequest, Severity, EvidenceCitation } from '../../types';
 import { auditWithStream, type ThinkingStep } from '../../lib/llmEngine';
 import { buildAuditRecord, saveAuditRecord } from '../lib/storage';
 import { downloadAuditZip } from '../lib/exportZip';
@@ -32,7 +32,7 @@ interface UiFinding {
   feature: string;
   leakageType: LeakageType;
   severity: Severity;
-  evidence: string[];
+  evidence: EvidenceCitation[];
   recommendation: string;
   humanReviewRequired: boolean;
   title: string;
@@ -51,7 +51,7 @@ function mapFinding(f: AuditFinding): UiFinding {
     feature: f.flagged_object,
     leakageType: macroToLeakage(f.macro_bucket),
     severity: f.severity,
-    evidence: f.evidence,
+    evidence: f.evidence ?? [],
     recommendation: f.fix_recommendation.join(' '),
     humanReviewRequired: f.needs_human_review,
     title: f.title,
@@ -415,28 +415,6 @@ export function AuditResults() {
           </div>
         </motion.div>
 
-        {report.clarifying_questions.length > 0 && (
-          <motion.div
-            initial="hidden"
-            animate="visible"
-            variants={fadeInVariants}
-            transition={{ delay: 0.25 }}
-            className="mb-10"
-          >
-            <div className="mb-4">
-              <h2 className="text-xl text-[var(--foreground)] mb-1">Clarifying questions</h2>
-              <p className="text-sm text-[var(--muted-foreground)]">
-                The agent flagged these for human confirmation
-              </p>
-            </div>
-            <ul className="bg-white rounded-lg border border-[var(--border)] px-8 py-6 space-y-3 text-sm text-[var(--foreground)] list-disc pl-5">
-              {report.clarifying_questions.map((q, i) => (
-                <li key={i}>{q}</li>
-              ))}
-            </ul>
-          </motion.div>
-        )}
-
         <motion.div
           initial="hidden"
           animate="visible"
@@ -605,12 +583,9 @@ function FindingItem({
             <h4 className="text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-3 font-medium">
               Evidence
             </h4>
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {finding.evidence.map((item, idx) => (
-                <li key={idx} className="flex items-start gap-3 text-sm text-[var(--foreground)]">
-                  <span className="text-[var(--accent-primary)] mt-1 font-bold">•</span>
-                  <span className="leading-relaxed">{item}</span>
-                </li>
+                <EvidenceRow key={idx} item={item} />
               ))}
             </ul>
           </div>
@@ -680,6 +655,71 @@ function SeverityFilterBar({
         );
       })}
     </div>
+  );
+}
+
+function EvidenceRow({ item }: { item: EvidenceCitation }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (!item.text?.trim()) return null;
+
+  const hasLabel = Boolean(item.citation_label?.trim());
+  const isCode = item.source_type === 'preprocessing_code' || item.source_type === 'model_training_code';
+  const isCsv = item.source_type === 'csv_header';
+
+  return (
+    <li>
+      <div className="flex items-start gap-3 text-sm text-[var(--foreground)]">
+        <span className="text-[var(--accent-primary)] mt-0.5 font-bold flex-shrink-0">•</span>
+        <span className="leading-relaxed">{item.text}</span>
+      </div>
+
+      {hasLabel && (
+        <div className="ml-6 mt-1.5">
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EFF3F8] text-[#64748B] text-xs cursor-pointer hover:bg-[#E2E8F0] transition-colors"
+          >
+            <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M4 1h8a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1zm0 1v12h8V2H4zm1 2h6v1H5V4zm0 2.5h6v1H5v-1zm0 2.5h4v1H5V9z" />
+            </svg>
+            <span>{item.citation_label}</span>
+            <ChevronDown className={`w-3 h-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+          </button>
+
+          {expanded && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mt-2 overflow-hidden"
+            >
+              {isCode ? (
+                <pre className="bg-[#1E293B] text-[#E2E8F0] p-4 rounded-lg text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed">
+                  {item.citation_detail}
+                </pre>
+              ) : isCsv ? (
+                <div className="flex flex-wrap gap-2 p-3 rounded-lg border border-[var(--border)] bg-[#fafbfc]">
+                  {item.citation_detail.split(', ').map((col, i) => (
+                    <span
+                      key={i}
+                      className="bg-[#E2E8F0] px-2 py-1 rounded text-xs font-mono text-[var(--foreground)]"
+                    >
+                      {col}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="border-l-2 border-[#94A3B8] pl-4 text-sm text-[#64748B] italic leading-relaxed">
+                  {item.citation_detail}
+                </div>
+              )}
+            </motion.div>
+          )}
+        </div>
+      )}
+    </li>
   );
 }
 

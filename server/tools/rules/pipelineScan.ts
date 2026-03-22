@@ -1,4 +1,5 @@
 import { AuditRequest, AuditFinding } from "../../../src/types";
+import { codeEvidence, csvEvidence } from "../../utils";
 
 export function pipelineScan(request: AuditRequest): AuditFinding[] {
   const findings: AuditFinding[] = [];
@@ -35,8 +36,16 @@ export function pipelineScan(request: AuditRequest): AuditFinding[] {
       confidence: "medium",
       flagged_object: idCols.join(", "),
       evidence: [
-        "Preprocessing code uses train_test_split without group-based splitting.",
-        `Likely entity ID columns detected: ${idCols.join(", ")}.`,
+        codeEvidence(
+          "Preprocessing code uses train_test_split without group-based splitting.",
+          "preprocessing_code",
+          request.preprocessing_code,
+          "train_test_split",
+        ),
+        csvEvidence(
+          `Likely entity ID columns detected: ${idCols.join(", ")}.`,
+          idCols,
+        ),
       ],
       why_it_matters:
         "Model may memorize entity identity instead of learning the task.",
@@ -78,8 +87,18 @@ export function pipelineScan(request: AuditRequest): AuditFinding[] {
         confidence: "medium",
         flagged_object: "pipeline preprocessing",
         evidence: [
-          `Code contains ${label} before the train/test split.`,
-          "Preprocessing fitted before split leaks test distribution into training.",
+          codeEvidence(
+            `Code contains ${label} before the train/test split.`,
+            "preprocessing_code",
+            request.preprocessing_code,
+            pattern,
+          ),
+          codeEvidence(
+            "Preprocessing fitted before split leaks test distribution into training.",
+            "preprocessing_code",
+            request.preprocessing_code,
+            "train_test_split",
+          ),
         ],
         why_it_matters:
           "Even clean features become tainted if preprocessing sees test data.",

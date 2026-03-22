@@ -11,7 +11,7 @@ export async function generateNarrativeReport(
       feature: f.flagged_object,
       type: f.macro_bucket,
       severity: f.severity,
-      evidence: f.evidence,
+      evidence: f.evidence.map((e) => e.text),
       fix: f.fix_recommendation,
     })),
     null,

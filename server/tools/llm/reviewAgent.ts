@@ -158,8 +158,18 @@ Respond in JSON:
       confidence: String(item.confidence) as AuditFinding["confidence"],
       flagged_object: featureName,
       evidence: [
-        `Review Agent cross-check: ${item.reasoning}`,
-        `Triggered because: ${reason}`,
+        {
+          text: `Review Agent cross-check: ${String(item.reasoning || "cross-check analysis")}`,
+          source_type: "llm_reasoning" as const,
+          citation_label: "Review Agent analysis",
+          citation_detail: String(item.reasoning || "cross-check analysis"),
+        },
+        {
+          text: `Triggered because: ${reason}`,
+          source_type: "llm_reasoning" as const,
+          citation_label: "Review Agent analysis",
+          citation_detail: `Cross-check trigger reason: ${reason}`,
+        },
       ],
       why_it_matters:
         "Cross-check by Review Agent found additional leakage risk not caught in initial scan.",
@@ -218,8 +228,18 @@ Respond in JSON:
       ) as AuditFinding["confidence"],
       flagged_object: featureName,
       evidence: [
-        `Review Agent deep dive: ${result.refined_reasoning}`,
-        ...((result.additional_evidence as string[]) ?? []),
+        {
+          text: `Review Agent deep dive: ${String(result.refined_reasoning || "deep-dive analysis")}`,
+          source_type: "llm_reasoning" as const,
+          citation_label: "Review Agent analysis",
+          citation_detail: String(result.refined_reasoning || "deep-dive analysis"),
+        },
+        ...((result.additional_evidence as string[]) ?? []).map((e) => ({
+          text: e,
+          source_type: "llm_reasoning" as const,
+          citation_label: "Review Agent analysis",
+          citation_detail: e,
+        })),
       ],
       why_it_matters:
         "Deep-dive analysis by Review Agent provides stronger evidence for this finding.",
@@ -268,8 +288,18 @@ Respond in JSON:
       confidence: String(result.confidence) as AuditFinding["confidence"],
       flagged_object: `${featureA} × ${featureB}`,
       evidence: [
-        `Review Agent interaction check: ${result.reasoning}`,
-        `Hypothesis: ${hypothesis}`,
+        {
+          text: `Review Agent interaction check: ${String(result.reasoning || "interaction analysis")}`,
+          source_type: "llm_reasoning" as const,
+          citation_label: "Review Agent analysis",
+          citation_detail: String(result.reasoning || "interaction analysis"),
+        },
+        {
+          text: `Hypothesis: ${hypothesis}`,
+          source_type: "llm_reasoning" as const,
+          citation_label: "Review Agent analysis",
+          citation_detail: `Interaction hypothesis: ${hypothesis}`,
+        },
       ],
       why_it_matters:
         "Feature interactions can create leakage that single-feature analysis misses.",

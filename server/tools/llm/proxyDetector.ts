@@ -57,19 +57,29 @@ Respond in this exact JSON format:
       low: "medium",
     };
 
+    const reasoning = String(item.reasoning || "LLM detected proxy leakage risk.");
+    const featureName = String(item.feature_name ?? "unknown");
+
     findings.push({
-      id: `proxy-${String(item.feature_name ?? "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
-      title: `${item.feature_name} appears to be a proxy for the target`,
+      id: `proxy-${featureName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+      title: `${featureName} appears to be a proxy for the target`,
       macro_bucket: "Feature / proxy leakage",
       fine_grained_type: "proxy",
       severity: (severityMap[conf] ?? "medium") as AuditFinding["severity"],
       confidence: conf as AuditFinding["confidence"],
-      flagged_object: String(item.feature_name),
-      evidence: [String(item.reasoning ?? "LLM detected proxy leakage risk.")],
+      flagged_object: featureName,
+      evidence: [
+        {
+          text: reasoning,
+          source_type: "llm_reasoning" as const,
+          citation_label: "LLM semantic analysis",
+          citation_detail: reasoning,
+        },
+      ],
       why_it_matters:
         "The model may be reading the answer key instead of learning predictive patterns.",
       fix_recommendation: [
-        `Remove ${item.feature_name} from the feature set, or redefine the prediction boundary.`,
+        `Remove ${featureName} from the feature set, or redefine the prediction boundary.`,
       ],
       needs_human_review: conf !== "high",
     });

@@ -1,5 +1,6 @@
 import { AuditRequest, AuditFinding } from "../../../src/types";
 import { callOpenAIJson } from "../../openaiClient";
+import { codeEvidence } from "../../utils";
 
 export async function auditModelTrainingCode(
   request: AuditRequest,
@@ -52,24 +53,41 @@ Respond in this exact JSON format:
   const result = await callOpenAIJson(systemPrompt, userPrompt);
   const issues = (result.issues as Array<Record<string, unknown>>) ?? [];
 
-  return issues.map((issue, i) => ({
-    id: `model-audit-${i}`,
-    title: String(issue.description ?? "Training code issue detected"),
-    macro_bucket:
-      "Structure / pipeline leakage" as AuditFinding["macro_bucket"],
-    fine_grained_type: "evaluation" as AuditFinding["fine_grained_type"],
-    severity: String(issue.severity ?? "medium") as AuditFinding["severity"],
-    confidence: "high" as AuditFinding["confidence"],
-    flagged_object: String(issue.code_reference ?? "training code"),
-    evidence: [
-      `Training code analysis found: ${issue.description}`,
-      `Relevant code: ${issue.code_reference ?? "N/A"}`,
-    ],
-    why_it_matters:
-      "Training pipeline leakage can inflate validation metrics and hide real performance.",
-    fix_recommendation: [
-      "Fix the identified issue in your model training pipeline.",
-    ],
-    needs_human_review: false,
-  }));
+  const trainingCode = request.model_training_code!;
+  return issues.map((issue, i) => {
+    const codeRef = String(issue.code_reference || "");
+    const desc = String(issue.description || "Training code issue detected");
+    return {
+      id: `model-audit-${i}`,
+      title: desc,
+      macro_bucket:
+        "Structure / pipeline leakage" as AuditFinding["macro_bucket"],
+      fine_grained_type: "evaluation" as AuditFinding["fine_grained_type"],
+      severity: String(issue.severity ?? "medium") as AuditFinding["severity"],
+      confidence: "high" as AuditFinding["confidence"],
+      flagged_object: codeRef || "training code",
+      evidence: [
+        codeEvidence(
+          `Training code analysis found: ${desc}`,
+          "model_training_code",
+          trainingCode,
+          codeRef || desc,
+        ),
+        ...(codeRef
+          ? [codeEvidence(
+              `Relevant code: ${codeRef}`,
+              "model_training_code",
+              trainingCode,
+              codeRef,
+            )]
+          : []),
+      ],
+      why_it_matters:
+        "Training pipeline leakage can inflate validation metrics and hide real performance.",
+      fix_recommendation: [
+        "Fix the identified issue in your model training pipeline.",
+      ],
+      needs_human_review: false,
+    };
+  });
 }

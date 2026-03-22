@@ -1,5 +1,6 @@
 import { AuditRequest, AuditFinding } from "../../../src/types";
 import { CodeAuditResult } from "../llm/codeAuditor";
+import { codeEvidence, csvEvidence } from "../../utils";
 
 export function structuralCheck(
   request: AuditRequest,
@@ -46,9 +47,24 @@ export function structuralCheck(
       confidence,
       flagged_object: entityKeys.join(", "),
       evidence: [
-        "Split method identified as random.",
-        `Likely entity keys: ${entityKeys.join(", ")}.`,
-        "Random split does not respect entity boundaries.",
+        codeEvidence(
+          "Split method identified as random.",
+          "preprocessing_code",
+          request.preprocessing_code,
+          "train_test_split",
+        ),
+        csvEvidence(
+          `Likely entity keys: ${entityKeys.join(", ")}.`,
+          entityKeys,
+        ),
+        {
+          text: "Random split does not respect entity boundaries.",
+          source_type: codeAuditResult ? "preprocessing_code" : "csv_header",
+          citation_label: codeAuditResult ? "code audit: split method" : "CSV header inference",
+          citation_detail: codeAuditResult
+            ? `Code audit detected split method: ${codeAuditResult.split_method}`
+            : `Entity ID columns inferred from CSV headers: ${entityKeys.join(", ")}`,
+        },
       ],
       why_it_matters:
         "Model learns entity identity rather than generalizable patterns.",

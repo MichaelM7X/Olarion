@@ -1,5 +1,6 @@
 import { AuditRequest, AuditFinding } from "../../../src/types";
 import { callOpenAIJson } from "../../openaiClient";
+import { codeEvidence } from "../../utils";
 
 export interface CodeAuditResult {
   split_method: string | null;
@@ -61,25 +62,41 @@ Respond in this exact JSON format:
     preprocessing: "Structure / pipeline leakage",
   };
 
-  const findings: AuditFinding[] = issues.map((issue, i) => ({
-    id: `code-audit-${i}`,
-    title: String(issue.description ?? "Code issue detected"),
-    macro_bucket: (bucketMap[String(issue.leakage_type ?? "")] ??
-      "Structure / pipeline leakage") as AuditFinding["macro_bucket"],
-    fine_grained_type: "evaluation" as AuditFinding["fine_grained_type"],
-    severity: String(issue.severity ?? "medium") as AuditFinding["severity"],
-    confidence: "high" as AuditFinding["confidence"],
-    flagged_object: String(issue.code_reference ?? "preprocessing code"),
-    evidence: [
-      `Code analysis found: ${issue.description}`,
-      `Relevant code: ${issue.code_reference ?? "N/A"}`,
-    ],
-    why_it_matters: "Code-level leakage is concrete and verifiable.",
-    fix_recommendation: [
-      "Fix the identified issue in your preprocessing pipeline.",
-    ],
-    needs_human_review: false,
-  }));
+  const findings: AuditFinding[] = issues.map((issue, i) => {
+    const codeRef = String(issue.code_reference || "");
+    const desc = String(issue.description || "Code issue detected");
+    return {
+      id: `code-audit-${i}`,
+      title: desc,
+      macro_bucket: (bucketMap[String(issue.leakage_type ?? "")] ??
+        "Structure / pipeline leakage") as AuditFinding["macro_bucket"],
+      fine_grained_type: "evaluation" as AuditFinding["fine_grained_type"],
+      severity: String(issue.severity ?? "medium") as AuditFinding["severity"],
+      confidence: "high" as AuditFinding["confidence"],
+      flagged_object: codeRef || "preprocessing code",
+      evidence: [
+        codeEvidence(
+          `Code analysis found: ${desc}`,
+          "preprocessing_code",
+          request.preprocessing_code,
+          codeRef || desc,
+        ),
+        ...(codeRef
+          ? [codeEvidence(
+              `Relevant code: ${codeRef}`,
+              "preprocessing_code",
+              request.preprocessing_code,
+              codeRef,
+            )]
+          : []),
+      ],
+      why_it_matters: "Code-level leakage is concrete and verifiable.",
+      fix_recommendation: [
+        "Fix the identified issue in your preprocessing pipeline.",
+      ],
+      needs_human_review: false,
+    };
+  });
 
   return {
     split_method: String(result.split_method ?? null),
