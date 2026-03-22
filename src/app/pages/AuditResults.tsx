@@ -20,9 +20,10 @@ import { FloatingChat } from '../components/FloatingChat';
 import { Navigation } from '../components/Navigation';
 import { Footer } from '../components/Footer';
 import type { AuditFinding, AuditReport, AuditRequest, Severity } from '../../types';
-import { auditWithLLM } from '../../lib/llmEngine';
+import { auditWithStream, type ThinkingStep } from '../../lib/llmEngine';
 import { buildAuditRecord, saveAuditRecord } from '../lib/storage';
 import { downloadAuditZip } from '../lib/exportZip';
+import { AuditThinking } from '../components/AuditThinking';
 
 type LeakageType = 'temporal' | 'feature' | 'pipeline';
 
@@ -82,6 +83,7 @@ export function AuditResults() {
   const [report, setReport] = useState<AuditReport | null>(savedReport ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(request) && !savedReport);
+  const [thinkingSteps, setThinkingSteps] = useState<ThinkingStep[]>([]);
 
   useEffect(() => {
     if (savedReport || !request) {
@@ -93,10 +95,14 @@ export function AuditResults() {
     setLoading(true);
     setLoadError(null);
     setReport(null);
+    setThinkingSteps([]);
 
     (async () => {
       try {
-        const nextReport = await auditWithLLM(request);
+        const nextReport = await auditWithStream(request, (step) => {
+          if (cancelled) return;
+          setThinkingSteps((prev) => [...prev, step]);
+        });
         if (cancelled) return;
         setReport(nextReport);
         saveAuditRecord(
@@ -190,13 +196,18 @@ export function AuditResults() {
     return (
       <div className="min-h-screen relative bg-[var(--background)]">
         <Navigation />
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <AmbientBackground variant="subtle" />
+        </div>
         <div className="h-20" />
-        <div className="flex flex-col items-center justify-center py-32 px-8">
-          <Loader2 className="w-10 h-10 text-[var(--accent-primary)] animate-spin mb-4" />
-          <p className="text-[var(--foreground)] font-medium">Running LeakGuard audit…</p>
-          <p className="text-sm text-[var(--muted-foreground)] mt-2 max-w-md text-center">
-            The agent is analyzing your task, columns, and code. This can take a couple of minutes.
-          </p>
+        <div className="flex flex-col items-center justify-center py-20 px-8 relative z-10">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl text-[var(--foreground)] font-medium mb-2">Running LeakGuard Audit</h2>
+            <p className="text-sm text-[var(--muted-foreground)] max-w-md">
+              The agent is analyzing your task, columns, and code for data leakage patterns.
+            </p>
+          </div>
+          <AuditThinking steps={thinkingSteps} />
         </div>
         <Footer />
       </div>

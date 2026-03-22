@@ -12,80 +12,117 @@ import { reviewAgent } from "./tools/llm/reviewAgent";
 import { generateNarrativeReport } from "./tools/llm/reportGenerator";
 import { dedupeFindings, computeOverallRisk } from "./utils";
 
-export async function runAudit(request: AuditRequest): Promise<AuditReport> {
+export interface ProgressEvent {
+  type: "step";
+  id: string;
+  status: "running" | "done" | "skipped";
+  title: string;
+  detail?: string;
+}
+
+type ProgressCallback = (event: ProgressEvent) => void;
+
+function noop() {}
+
+export async function runAudit(
+  request: AuditRequest,
+  onProgress: ProgressCallback = noop,
+): Promise<AuditReport> {
   const findings: AuditFinding[] = [];
 
-  console.log("\n========== Phase 1: Fixed Orchestration ==========");
-
-  // Step 1: rule-engine scan of preprocessing code
+  // Step 1: pipeline scan
+  onProgress({ type: "step", id: "pipeline-scan", status: "running", title: "Scanning preprocessing pipeline" });
   const pipelineFindings = pipelineScan(request);
-  console.log(`[Phase 1] pipelineScan → ${pipelineFindings.length} finding(s)`);
+  onProgress({
+    type: "step", id: "pipeline-scan", status: "done", title: "Scanning preprocessing pipeline",
+    detail: pipelineFindings.length > 0 ? `Found ${pipelineFindings.length} pipeline issue(s)` : "No pipeline issues detected",
+  });
   findings.push(...pipelineFindings);
 
-  // Step 2: LLM tools (parallel)
-  console.log("[Phase 1] Running proxyDetector + temporalDetector in parallel...");
+  // Step 2: proxy + temporal detectors (parallel)
+  onProgress({ type: "step", id: "proxy-detector", status: "running", title: "Detecting proxy leakage" });
+  onProgress({ type: "step", id: "temporal-detector", status: "running", title: "Detecting temporal leakage" });
+
   const [proxyFindings, temporalFindings] = await Promise.all([
     detectProxyLeakage(request),
     detectTemporalLeakage(request),
   ]);
-  console.log(`[Phase 1] proxyDetector → ${proxyFindings.length} finding(s)`);
-  console.log(`[Phase 1] temporalDetector → ${temporalFindings.length} finding(s)`);
+
+  onProgress({
+    type: "step", id: "proxy-detector", status: "done", title: "Detecting proxy leakage",
+    detail: proxyFindings.length > 0 ? `Flagged ${proxyFindings.length} proxy feature(s)` : "No proxy leakage found",
+  });
+  onProgress({
+    type: "step", id: "temporal-detector", status: "done", title: "Detecting temporal leakage",
+    detail: temporalFindings.length > 0 ? `Flagged ${temporalFindings.length} temporal issue(s)` : "No temporal leakage found",
+  });
   findings.push(...proxyFindings);
   findings.push(...temporalFindings);
 
-  // Step 3: code audit (always runs — preprocessing_code is required)
-  console.log("[Phase 1] Running codeAuditor...");
+  // Step 3: code audit
+  onProgress({ type: "step", id: "code-auditor", status: "running", title: "Auditing preprocessing code" });
   let codeAuditResult: CodeAuditResult | null = null;
   codeAuditResult = await auditPreprocessingCode(request);
-  console.log(`[Phase 1] codeAuditor → ${codeAuditResult.findings.length} finding(s), split_method: ${codeAuditResult.split_method}, entity_keys: [${codeAuditResult.detected_entity_keys.join(", ")}]`);
+  onProgress({
+    type: "step", id: "code-auditor", status: "done", title: "Auditing preprocessing code",
+    detail: `Found ${codeAuditResult.findings.length} code issue(s), split: ${codeAuditResult.split_method ?? "unknown"}`,
+  });
   findings.push(...codeAuditResult.findings);
 
-  // Step 4: model training code audit (conditional)
+  // Step 4: model training code audit
   if (request.model_training_code) {
-    console.log("[Phase 1] Running modelCodeAuditor...");
+    onProgress({ type: "step", id: "model-auditor", status: "running", title: "Auditing model training code" });
     const modelFindings = await auditModelTrainingCode(request);
-    console.log(`[Phase 1] modelCodeAuditor → ${modelFindings.length} finding(s)`);
+    onProgress({
+      type: "step", id: "model-auditor", status: "done", title: "Auditing model training code",
+      detail: modelFindings.length > 0 ? `Found ${modelFindings.length} training issue(s)` : "No training code issues",
+    });
     findings.push(...modelFindings);
   } else {
-    console.log("[Phase 1] No model_training_code provided, skipping modelCodeAuditor.");
+    onProgress({ type: "step", id: "model-auditor", status: "skipped", title: "Auditing model training code", detail: "No training code provided" });
   }
 
-  // Step 5: structural check (uses code audit result for entity key detection)
+  // Step 5: structural check
+  onProgress({ type: "step", id: "structural-check", status: "running", title: "Checking data structure" });
   const structFindings = structuralCheck(request, codeAuditResult);
-  console.log(`[Phase 1] structuralCheck → ${structFindings.length} finding(s)`);
+  onProgress({
+    type: "step", id: "structural-check", status: "done", title: "Checking data structure",
+    detail: structFindings.length > 0 ? `Found ${structFindings.length} structural issue(s)` : "Structure looks clean",
+  });
   findings.push(...structFindings);
 
   const phase1Findings = dedupeFindings(findings);
-  console.log(`[Phase 1] Total after dedup: ${phase1Findings.length} finding(s)\n`);
 
-  console.log("========== Phase 2: Review Agent ==========");
+  // Step 6: Review Agent
+  onProgress({
+    type: "step", id: "review-agent", status: "running", title: "Review Agent analyzing findings",
+    detail: `Reviewing ${phase1Findings.length} findings from Phase 1…`,
+  });
 
   let additionalFindings: AuditFinding[] = [];
   try {
     additionalFindings = await reviewAgent(request, phase1Findings);
   } catch (error) {
-    console.error(
-      "Review agent failed, continuing with Phase 1 results:",
-      error,
-    );
+    console.error("Review agent failed, continuing with Phase 1 results:", error);
   }
 
-  console.log(`[Phase 2] Review Agent → ${additionalFindings.length} additional finding(s)\n`);
+  onProgress({
+    type: "step", id: "review-agent", status: "done", title: "Review Agent analyzing findings",
+    detail: additionalFindings.length > 0
+      ? `Added ${additionalFindings.length} additional finding(s)`
+      : "Confirmed initial assessment — no additional issues",
+  });
 
-  console.log("========== Phase 3: Final Aggregation ==========");
-
-  const allFindings = dedupeFindings([
-    ...phase1Findings,
-    ...additionalFindings,
-  ]);
+  // Step 7: Report generation
+  const allFindings = dedupeFindings([...phase1Findings, ...additionalFindings]);
   const overallRisk = computeOverallRisk(allFindings);
-  console.log(`[Phase 3] Final findings: ${allFindings.length}, Overall risk: ${overallRisk.toUpperCase()}`);
 
-  const narrative = await generateNarrativeReport(
-    request,
-    allFindings,
-    overallRisk,
-  );
+  onProgress({ type: "step", id: "report-gen", status: "running", title: "Generating narrative report" });
+  const narrative = await generateNarrativeReport(request, allFindings, overallRisk);
+  onProgress({
+    type: "step", id: "report-gen", status: "done", title: "Generating narrative report",
+    detail: `Overall risk: ${overallRisk.toUpperCase()}, ${allFindings.length} total finding(s)`,
+  });
 
   const bucketSummary = {
     "Time leakage": 0,

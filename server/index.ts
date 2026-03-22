@@ -19,6 +19,32 @@ app.post("/api/audit", async (req, res) => {
   }
 });
 
+app.post("/api/audit-stream", async (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const { request } = req.body;
+
+  const sendEvent = (type: string, data: Record<string, unknown>) => {
+    res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+  };
+
+  try {
+    const report = await runAudit(request, (event) => {
+      sendEvent("step", event as unknown as Record<string, unknown>);
+    });
+    sendEvent("complete", { report: report as unknown as Record<string, unknown> });
+  } catch (error) {
+    console.error("Audit stream error:", error);
+    sendEvent("error", { message: "Audit failed" });
+  }
+
+  res.end();
+});
+
 app.post("/api/chat", async (req, res) => {
   try {
     const { question, report, request, history } = req.body;

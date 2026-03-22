@@ -1,5 +1,13 @@
 import type { AuditReport, AuditRequest } from "../types";
 
+export interface ThinkingStep {
+  id: string;
+  status: "running" | "done" | "skipped";
+  title: string;
+  detail?: string;
+  timestamp: number;
+}
+
 export async function auditWithLLM(
   request: AuditRequest,
 ): Promise<AuditReport> {
@@ -21,6 +29,63 @@ export async function auditWithLLM(
     throw new Error("Audit response did not include a report.");
   }
 
+  return report;
+}
+
+export async function auditWithStream(
+  request: AuditRequest,
+  onStep: (step: ThinkingStep) => void,
+): Promise<AuditReport> {
+  const response = await fetch("/api/audit-stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ request }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Audit request failed: ${response.status}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("No response body");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let report: AuditReport | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      try {
+        const event = JSON.parse(line.slice(6));
+        if (event.type === "step") {
+          onStep({
+            id: event.id,
+            status: event.status,
+            title: event.title,
+            detail: event.detail,
+            timestamp: Date.now(),
+          });
+        } else if (event.type === "complete") {
+          report = event.report;
+        } else if (event.type === "error") {
+          throw new Error(event.message ?? "Audit failed");
+        }
+      } catch (e) {
+        if (e instanceof Error && e.message !== "Audit failed") continue;
+        throw e;
+      }
+    }
+  }
+
+  if (!report) throw new Error("Audit stream ended without a report.");
   return report;
 }
 
