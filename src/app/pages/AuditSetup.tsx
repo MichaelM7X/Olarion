@@ -1,7 +1,8 @@
 import { motion } from 'motion/react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowRight, Upload, FileText, Code, AlertCircle, Clock, Network, Shield } from 'lucide-react';
+import { ArrowRight, Upload, FileText, Code, AlertCircle, Clock, Network, Shield, Archive, CheckCircle2, Loader2 } from 'lucide-react';
+import JSZip from 'jszip';
 import { Navigation } from '../components/Navigation';
 import { Footer } from '../components/Footer';
 import { FloatingChat } from '../components/FloatingChat';
@@ -18,6 +19,84 @@ export function AuditSetup() {
   const [trainingCode, setTrainingCode] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [zipProcessing, setZipProcessing] = useState(false);
+  const [zipStatus, setZipStatus] = useState<string | null>(null);
+
+  const handleZipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setZipProcessing(true);
+    setZipStatus('Reading ZIP file…');
+    setSubmitError(null);
+
+    try {
+      const zip = await JSZip.loadAsync(file);
+      const csvFiles: { name: string; file: JSZip.JSZipObject }[] = [];
+      const pyFiles: { name: string; file: JSZip.JSZipObject }[] = [];
+
+      zip.forEach((relativePath, zipEntry) => {
+        if (zipEntry.dir) return;
+        const name = relativePath.split('/').pop() ?? relativePath;
+        if (name.startsWith('.') || name.startsWith('__')) return;
+        if (name.endsWith('.csv')) csvFiles.push({ name, file: zipEntry });
+        if (name.endsWith('.py')) pyFiles.push({ name, file: zipEntry });
+      });
+
+      if (csvFiles.length === 0) {
+        setSubmitError('No .csv file found in the ZIP.');
+        setZipProcessing(false);
+        setZipStatus(null);
+        return;
+      }
+      if (pyFiles.length === 0) {
+        setSubmitError('No .py file found in the ZIP.');
+        setZipProcessing(false);
+        setZipStatus(null);
+        return;
+      }
+
+      setZipStatus('Extracting CSV…');
+      const csvContent = await csvFiles[0].file.async('blob');
+      const csvFileObj = new File([csvContent], csvFiles[0].name, { type: 'text/csv' });
+      setDatasetFile(csvFileObj);
+
+      setZipStatus('Reading Python files…');
+      const pyContents = await Promise.all(
+        pyFiles.map(async (pf) => ({
+          filename: pf.name,
+          content: await pf.file.async('string'),
+        })),
+      );
+
+      if (pyContents.length === 1) {
+        setPreprocessingCode(pyContents[0].content);
+        setTrainingCode('');
+        setZipStatus(null);
+      } else {
+        setZipStatus('Classifying code files with LLM…');
+        const resp = await fetch('http://localhost:3001/api/classify-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ files: pyContents }),
+        });
+        if (!resp.ok) throw new Error('Code classification API failed');
+        const result = await resp.json();
+        setPreprocessingCode(result.preprocessing_code ?? '');
+        setTrainingCode(result.model_training_code ?? '');
+        setZipStatus(null);
+      }
+
+      setZipStatus(`Done — extracted ${csvFiles[0].name} + ${pyFiles.length} code file(s)`);
+      setTimeout(() => setZipStatus(null), 4000);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Failed to process ZIP file.');
+      setZipStatus(null);
+    } finally {
+      setZipProcessing(false);
+      e.target.value = '';
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,12 +179,64 @@ export function AuditSetup() {
             {/* Main Form - Left Column (2 cols) */}
             <div className="col-span-2 space-y-8">
               <form onSubmit={handleSubmit} className="space-y-8">
+                {/* Quick Upload */}
+                <motion.div variants={fadeUpVariants}>
+                  <div className="mb-4">
+                    <h2 className="text-lg text-[var(--foreground)] mb-2">Quick Upload</h2>
+                    <p className="text-sm text-[var(--muted-foreground)]">
+                      Upload a ZIP containing your CSV dataset and Python code files. The system will auto-detect which file is which.
+                    </p>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept=".zip"
+                      onChange={handleZipUpload}
+                      disabled={zipProcessing}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    />
+                    <div
+                      className={`border-2 border-dashed rounded-lg px-6 py-6 text-center transition-all ${
+                        zipProcessing
+                          ? 'border-[var(--accent-primary)] bg-[var(--accent-primary-pale)]'
+                          : 'border-[var(--border)] bg-white hover:border-[var(--accent-primary)] hover:bg-[var(--secondary)]'
+                      }`}
+                    >
+                      <div className="flex flex-col items-center gap-2">
+                        {zipProcessing ? (
+                          <Loader2 className="w-6 h-6 text-[var(--accent-primary)] animate-spin" />
+                        ) : (
+                          <Archive className="w-6 h-6 text-[var(--muted-foreground)]" />
+                        )}
+                        <p className="text-sm text-[var(--muted-foreground)]">
+                          {zipProcessing ? zipStatus : 'Drop a ZIP file here, or click to browse'}
+                        </p>
+                        <p className="text-xs text-[var(--muted-foreground)]">
+                          Must contain at least one .csv and one .py file
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  {zipStatus && !zipProcessing && (
+                    <div className="flex items-center gap-2 mt-2 text-sm text-green-600">
+                      <CheckCircle2 className="w-4 h-4" />
+                      {zipStatus}
+                    </div>
+                  )}
+                </motion.div>
+
+                <div className="relative flex items-center gap-4 py-2">
+                  <div className="flex-1 border-t border-[var(--border)]" />
+                  <span className="text-xs text-[var(--muted-foreground)] uppercase tracking-wider">or fill in manually</span>
+                  <div className="flex-1 border-t border-[var(--border)]" />
+                </div>
+
                 {/* Required Inputs Section */}
                 <motion.div variants={fadeUpVariants}>
                   <div className="mb-6">
                     <h2 className="text-lg text-[var(--foreground)] mb-2">Required Inputs</h2>
                     <p className="text-sm text-[var(--muted-foreground)]">
-                      These three inputs are needed to run the audit.
+                      These inputs are needed to run the audit. Fill manually or use ZIP upload above.
                     </p>
                   </div>
 
