@@ -16,7 +16,7 @@ import { Footer } from '../components/Footer';
 import { listAuditRecords, type AuditRecord } from '../lib/storage';
 
 function deleteAuditRecord(id: string) {
-  const key = 'leakguard.audit-history';
+  const key = 'clarion.audit-history';
   try {
     const raw = window.localStorage.getItem(key);
     const records: AuditRecord[] = raw ? JSON.parse(raw) : [];

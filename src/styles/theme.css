@@ -26,7 +26,7 @@
   --font-weight-normal: 400;
   --ring: #94a3b8;
   
-  /* LeakGuard enterprise colors - cool, neutral palette */
+  /* Clarion enterprise colors - cool, neutral palette */
   --accent-primary: #475569;
   --accent-primary-light: #64748b;
   --accent-primary-pale: #f1f5f9;
@@ -119,7 +119,7 @@
   --color-switch-background: var(--switch-background);
   --color-ring: var(--ring);
   
-  /* LeakGuard enterprise colors */
+  /* Clarion enterprise colors */
   --color-accent-primary: var(--accent-primary);
   --color-accent-primary-light: var(--accent-primary-light);
   --color-accent-primary-pale: var(--accent-primary-pale);
@@ -214,4 +214,10 @@
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
   }
+}
+
+@keyframes gradientShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }

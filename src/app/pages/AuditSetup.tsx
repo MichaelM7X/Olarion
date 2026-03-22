@@ -1,7 +1,7 @@
 import { motion } from 'motion/react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowRight, Upload, FileText, Code, AlertCircle, Clock, Network, Shield, Archive, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowRight, Upload, FileText, Code, AlertCircle, Clock, Network, Layers, Archive, CheckCircle2, Loader2 } from 'lucide-react';
 import JSZip from 'jszip';
 import { Navigation } from '../components/Navigation';
 import { Footer } from '../components/Footer';
@@ -171,7 +171,7 @@ export function AuditSetup() {
           <motion.div variants={fadeUpVariants} className="mb-12">
             <h1 className="text-3xl mb-3 text-[var(--foreground)]">Audit Setup</h1>
             <p className="text-base text-[var(--muted-foreground)] max-w-2xl">
-              Provide your prediction task details and data artifacts. The agent will audit for temporal, feature, and pipeline leakage.
+              Provide your prediction task details and data artifacts.
             </p>
           </motion.div>
 
@@ -179,12 +179,13 @@ export function AuditSetup() {
             {/* Main Form - Left Column (2 cols) */}
             <div className="col-span-2 space-y-8">
               <form onSubmit={handleSubmit} className="space-y-8">
-                {/* Quick Upload */}
+
+                {/* Step 1 — ZIP Upload */}
                 <motion.div variants={fadeUpVariants}>
                   <div className="mb-4">
-                    <h2 className="text-lg text-[var(--foreground)] mb-2">Quick Upload</h2>
+                    <h2 className="text-lg text-[var(--foreground)] mb-1">Upload your project</h2>
                     <p className="text-sm text-[var(--muted-foreground)]">
-                      Upload a ZIP containing your CSV dataset and Python code files. The system will auto-detect which file is which.
+                      Drop a ZIP with your CSV dataset and Python code. The agent parses it automatically.
                     </p>
                   </div>
                   <div className="relative">
@@ -196,52 +197,59 @@ export function AuditSetup() {
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                     />
                     <div
-                      className={`border-2 border-dashed rounded-lg px-6 py-6 text-center transition-all ${
+                      className={`border-2 border-dashed rounded-xl px-6 py-8 text-center transition-all ${
                         zipProcessing
-                          ? 'border-[var(--accent-primary)] bg-[var(--accent-primary-pale)]'
-                          : 'border-[var(--border)] bg-white hover:border-[var(--accent-primary)] hover:bg-[var(--secondary)]'
+                          ? 'border-[var(--accent-primary)]/60 bg-[var(--accent-primary-pale)]'
+                          : datasetFile && preprocessingCode
+                          ? 'border-emerald-300/60 bg-emerald-50/40'
+                          : 'border-[var(--border)]/60 bg-white/50 hover:border-[var(--accent-primary)]/40 hover:bg-white/70'
                       }`}
                     >
                       <div className="flex flex-col items-center gap-2">
                         {zipProcessing ? (
-                          <Loader2 className="w-6 h-6 text-[var(--accent-primary)] animate-spin" />
+                          <Loader2 className="w-7 h-7 text-[var(--accent-primary)] animate-spin" />
+                        ) : datasetFile && preprocessingCode ? (
+                          <CheckCircle2 className="w-7 h-7 text-emerald-500" />
                         ) : (
-                          <Archive className="w-6 h-6 text-[var(--muted-foreground)]" />
+                          <Archive className="w-7 h-7 text-[var(--muted-foreground)]" />
                         )}
-                        <p className="text-sm text-[var(--muted-foreground)]">
-                          {zipProcessing ? zipStatus : 'Drop a ZIP file here, or click to browse'}
+                        <p className="text-sm font-medium text-[var(--foreground)]">
+                          {zipProcessing
+                            ? zipStatus
+                            : datasetFile && preprocessingCode
+                            ? 'ZIP parsed — dataset and code extracted'
+                            : 'Drop a ZIP file here, or click to browse'}
                         </p>
-                        <p className="text-xs text-[var(--muted-foreground)]">
-                          Must contain at least one .csv and one .py file
-                        </p>
+                        {datasetFile && preprocessingCode ? (
+                          <div className="flex items-center gap-4 mt-1">
+                            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600">
+                              <FileText className="w-3.5 h-3.5" />
+                              {datasetFile.name}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600">
+                              <Code className="w-3.5 h-3.5" />
+                              Code extracted
+                            </span>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-[var(--muted-foreground)]">
+                            Must contain at least one .csv and one .py file
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
-                  {zipStatus && !zipProcessing && (
-                    <div className="flex items-center gap-2 mt-2 text-sm text-green-600">
-                      <CheckCircle2 className="w-4 h-4" />
-                      {zipStatus}
-                    </div>
-                  )}
                 </motion.div>
 
-                <div className="relative flex items-center gap-4 py-2">
-                  <div className="flex-1 border-t border-[var(--border)]" />
-                  <span className="text-xs text-[var(--muted-foreground)] uppercase tracking-wider">or fill in manually</span>
-                  <div className="flex-1 border-t border-[var(--border)]" />
-                </div>
-
-                {/* Required Inputs Section */}
+                {/* Step 2 — Task Details (always manual) */}
                 <motion.div variants={fadeUpVariants}>
-                  <div className="mb-6">
-                    <h2 className="text-lg text-[var(--foreground)] mb-2">Required Inputs</h2>
+                  <div className="mb-4">
+                    <h2 className="text-lg text-[var(--foreground)] mb-1">Task details</h2>
                     <p className="text-sm text-[var(--muted-foreground)]">
-                      These inputs are needed to run the audit. Fill manually or use ZIP upload above.
+                      Describe your prediction goal and the target column.
                     </p>
                   </div>
-
-                  <div className="space-y-6">
-                    {/* Prediction Task Description */}
+                  <div className="space-y-5">
                     <div>
                       <label className="block text-sm text-[var(--foreground)] mb-2">
                         Prediction task description
@@ -251,15 +259,14 @@ export function AuditSetup() {
                         value={taskDescription}
                         onChange={(e) => setTaskDescription(e.target.value)}
                         placeholder="Example: Predict 30-day hospital readmission for heart failure patients at discharge time"
-                        className="w-full px-4 py-3 rounded-lg border border-[var(--border)] bg-white focus:outline-none focus:border-[var(--accent-primary)] transition-all resize-none text-sm"
+                        className="w-full px-4 py-3 rounded-lg border border-[var(--border)]/60 bg-white/60 backdrop-blur-sm focus:outline-none focus:border-[var(--accent-primary)] transition-all resize-none text-sm"
                         rows={3}
                         required
                       />
-                      <p className="text-xs text-[var(--muted-foreground)] mt-2">
+                      <p className="text-xs text-[var(--muted-foreground)] mt-1.5">
                         Describe what you're predicting and when the prediction is made
                       </p>
                     </div>
-
                     <div>
                       <label className="block text-sm text-[var(--foreground)] mb-2">
                         Target column name
@@ -270,63 +277,71 @@ export function AuditSetup() {
                         value={targetColumn}
                         onChange={(e) => setTargetColumn(e.target.value)}
                         placeholder="Must match the CSV header exactly (e.g. readmitted_30d)"
-                        className="w-full px-4 py-3 rounded-lg border border-[var(--border)] bg-white focus:outline-none focus:border-[var(--accent-primary)] transition-all text-sm font-mono"
+                        className="w-full px-4 py-3 rounded-lg border border-[var(--border)]/60 bg-white/60 backdrop-blur-sm focus:outline-none focus:border-[var(--accent-primary)] transition-all text-sm font-mono"
                         required
                       />
-                      <p className="text-xs text-[var(--muted-foreground)] mt-2">
+                      <p className="text-xs text-[var(--muted-foreground)] mt-1.5">
                         Same spelling as the outcome column in your uploaded CSV
-                      </p>
-                    </div>
-
-                    {/* CSV Dataset */}
-                    <div>
-                      <label className="block text-sm text-[var(--foreground)] mb-2">
-                        Training dataset (CSV)
-                        <span className="text-[var(--risk-critical)] ml-1">*</span>
-                      </label>
-                      <FileUploadArea
-                        file={datasetFile}
-                        onFileSelect={setDatasetFile}
-                        accept=".csv"
-                        placeholder="Upload CSV file or drag and drop"
-                      />
-                      <p className="text-xs text-[var(--muted-foreground)] mt-2">
-                        Your training data with features and target variable
-                      </p>
-                    </div>
-
-                    {/* Preprocessing Code */}
-                    <div>
-                      <label className="block text-sm text-[var(--foreground)] mb-2">
-                        Preprocessing code
-                        <span className="text-[var(--risk-critical)] ml-1">*</span>
-                      </label>
-                      <CodeInput
-                        value={preprocessingCode}
-                        onChange={setPreprocessingCode}
-                        placeholder="# Paste your feature engineering and preprocessing code here
-# Example:
-# df['age_at_admission'] = (df['admission_date'] - df['birth_date']).dt.days / 365
-# df['readmission_flag'] = df['readmission_date'].notna()"
-                      />
-                      <p className="text-xs text-[var(--muted-foreground)] mt-2">
-                        Feature engineering, transformations, and data cleaning steps
                       </p>
                     </div>
                   </div>
                 </motion.div>
 
-                {/* Optional Input Section */}
+                {/* Step 3 — Manual data & code (only if ZIP not used) */}
+                {!(datasetFile && preprocessingCode) && (
+                  <motion.div variants={fadeUpVariants}>
+                    <div className="relative flex items-center gap-4 py-2 mb-6">
+                      <div className="flex-1 border-t border-[var(--border)]/60" />
+                      <span className="text-xs text-[var(--muted-foreground)] uppercase tracking-wider">or provide manually</span>
+                      <div className="flex-1 border-t border-[var(--border)]/60" />
+                    </div>
+                    <div className="space-y-6">
+                      <div>
+                        <label className="block text-sm text-[var(--foreground)] mb-2">
+                          Training dataset (CSV)
+                          <span className="text-[var(--risk-critical)] ml-1">*</span>
+                        </label>
+                        <FileUploadArea
+                          file={datasetFile}
+                          onFileSelect={setDatasetFile}
+                          accept=".csv"
+                          placeholder="Upload CSV file or drag and drop"
+                        />
+                        <p className="text-xs text-[var(--muted-foreground)] mt-1.5">
+                          Your training data with features and target variable
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm text-[var(--foreground)] mb-2">
+                          Preprocessing code
+                          <span className="text-[var(--risk-critical)] ml-1">*</span>
+                        </label>
+                        <CodeInput
+                          value={preprocessingCode}
+                          onChange={setPreprocessingCode}
+                          placeholder="# Paste your feature engineering and preprocessing code here
+# Example:
+# df['age_at_admission'] = (df['admission_date'] - df['birth_date']).dt.days / 365
+# df['readmission_flag'] = df['readmission_date'].notna()"
+                        />
+                        <p className="text-xs text-[var(--muted-foreground)] mt-1.5">
+                          Feature engineering, transformations, and data cleaning steps
+                        </p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Optional — model training code */}
                 <motion.div variants={fadeUpVariants}>
-                  <div className="mb-6 pt-6 border-t border-[var(--border)]">
-                    <h2 className="text-lg text-[var(--foreground)] mb-2">Optional Input</h2>
-                    <p className="text-sm text-[var(--muted-foreground)]">
-                      Providing this helps detect additional pipeline-level leakage.
+                  <div className="pt-6 border-t border-[var(--border)]/60 mb-4">
+                    <h2 className="text-sm text-[var(--muted-foreground)] mb-0.5">Optional</h2>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      Providing training code helps detect additional pipeline-level leakage.
                     </p>
                   </div>
-
                   <div>
-                    <label className="block text-sm text-[var(--muted-foreground)] mb-2">
+                    <label className="block text-sm text-[var(--foreground)] mb-2">
                       Model training code
                     </label>
                     <CodeInput
@@ -339,14 +354,14 @@ export function AuditSetup() {
 # model.fit(X_train, y_train)"
                       rows={6}
                     />
-                    <p className="text-xs text-[var(--muted-foreground)] mt-2">
+                    <p className="text-xs text-[var(--muted-foreground)] mt-1.5">
                       Train/test split logic, model fitting, and evaluation code
                     </p>
                   </div>
                 </motion.div>
 
-                {/* Submit Button */}
-                <motion.div variants={fadeUpVariants} className="pt-6">
+                {/* Submit */}
+                <motion.div variants={fadeUpVariants} className="pt-4">
                   {submitError && (
                     <p className="text-sm text-[var(--risk-critical)] mb-4 px-1" role="alert">
                       {submitError}
@@ -366,7 +381,7 @@ export function AuditSetup() {
                   </button>
                   {!canSubmit && !isSubmitting && (
                     <p className="text-xs text-[var(--muted-foreground)] text-center mt-3">
-                      Complete all required fields to run the audit
+                      {!datasetFile ? 'Upload a ZIP or provide a CSV dataset' : 'Fill in task description and target column to continue'}
                     </p>
                   )}
                 </motion.div>
@@ -375,7 +390,7 @@ export function AuditSetup() {
 
             {/* Info Panel - Right Column */}
             <motion.div variants={fadeUpVariants} className="col-span-1">
-              <div className="bg-white rounded-lg border border-[var(--border)] p-6 sticky top-28">
+              <div className="bg-white/60 backdrop-blur-sm rounded-xl border border-[var(--border)]/60 p-6 sticky top-28">
                 <h3 className="text-base text-[var(--foreground)] mb-4">What the agent audits</h3>
                 
                 <div className="space-y-4">
@@ -390,7 +405,7 @@ export function AuditSetup() {
                     description="Identifies target proxies and leaked variables"
                   />
                   <AuditTypeCard
-                    icon={Shield}
+                    icon={Layers}
                     title="Pipeline Leakage"
                     description="Audits train/test splits and transformations"
                   />
@@ -451,7 +466,7 @@ function FileUploadArea({
         className={`border-2 border-dashed rounded-lg px-6 py-8 text-center transition-all ${
           file
             ? 'border-[var(--accent-primary)] bg-[var(--accent-primary-pale)]'
-            : 'border-[var(--border)] bg-white hover:border-[var(--accent-primary)] hover:bg-[var(--secondary)]'
+            : 'border-[var(--border)]/60 bg-white/50 hover:border-[var(--accent-primary)]/50 hover:bg-white/70'
         }`}
       >
         {file ? (
@@ -496,7 +511,7 @@ function CodeInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full pl-10 pr-4 py-3 rounded-lg border border-[var(--border)] bg-white focus:outline-none focus:border-[var(--accent-primary)] transition-all resize-none font-mono text-xs"
+        className="w-full pl-10 pr-4 py-3 rounded-lg border border-[var(--border)]/60 bg-white/60 backdrop-blur-sm focus:outline-none focus:border-[var(--accent-primary)] transition-all resize-none font-mono text-xs"
         rows={rows}
         style={{ fontFamily: 'ui-monospace, monospace' }}
       />
@@ -516,8 +531,11 @@ function AuditTypeCard({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="w-8 h-8 rounded-lg bg-[var(--secondary)] flex items-center justify-center flex-shrink-0 border border-[var(--border)]">
-        <Icon className="w-4 h-4 text-[var(--accent-primary)]" />
+      <div
+        className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+        style={{ background: 'linear-gradient(135deg, #A7BFFB 0%, #BFDBFE 50%, #D4E8FF 100%)' }}
+      >
+        <Icon className="w-4 h-4 text-white" />
       </div>
       <div>
         <h4 className="text-sm text-[var(--foreground)] mb-1">{title}</h4>

@@ -1,4 +1,4 @@
-import { Shield } from 'lucide-react';
+import { ClarionLogo } from './ClarionLogo';
 
 export function Footer() {
   return (
@@ -8,20 +8,18 @@ export function Footer() {
           {/* Logo and Copyright */}
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[var(--primary)] flex items-center justify-center">
-                <Shield className="w-4 h-4 text-white" />
-              </div>
-              <span className="font-serif text-lg text-[var(--foreground)]">LeakGuard</span>
+              <ClarionLogo size={40} />
+              <span className="font-serif text-lg text-[var(--foreground)]">Clarion</span>
             </div>
             <p className="text-sm text-[var(--muted-foreground)]">
-              © 2026 LeakGuard. All rights reserved.
+              © 2026 Clarion. All rights reserved.
             </p>
           </div>
 
           {/* Additional Links */}
           <div className="flex items-center gap-6">
             <span className="text-sm text-[var(--muted-foreground)]">
-              Enterprise Audit Tool
+              Enterprise Model Audit Tool
             </span>
           </div>
         </div>

@@ -10,8 +10,8 @@ export interface AuditRecord {
   report: AuditReport;
 }
 
-const AUDIT_HISTORY_KEY = "leakguard.audit-history";
-const CURRENT_AUDIT_KEY = "leakguard.current-audit";
+const AUDIT_HISTORY_KEY = "clarion.audit-history";
+const CURRENT_AUDIT_KEY = "clarion.current-audit";
 
 function isBrowser() {
   return typeof window !== "undefined";

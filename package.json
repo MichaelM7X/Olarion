@@ -1,12 +1,12 @@
 {
-  "name": "leakguard",
+  "name": "clarion",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "server": "node --env-file=.env --import tsx server/index.ts",
-    "server:watch": "tsx watch server/index.ts",
+    "server:watch": "node --env-file=.env --import tsx --watch server/index.ts",
     "dev:full": "concurrently \"npm run dev\" \"npm run server:watch\"",
     "build": "tsc && vite build",
     "preview": "vite preview",
