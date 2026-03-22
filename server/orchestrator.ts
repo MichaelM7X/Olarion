@@ -118,7 +118,7 @@ export async function runAudit(
   const overallRisk = computeOverallRisk(allFindings);
 
   onProgress({ type: "step", id: "report-gen", status: "running", title: "Generating narrative report" });
-  const narrative = await generateNarrativeReport(request, allFindings, overallRisk);
+  const { executive_summary, full_report } = await generateNarrativeReport(request, allFindings, overallRisk);
   onProgress({
     type: "step", id: "report-gen", status: "done", title: "Generating narrative report",
     detail: `Overall risk: ${overallRisk.toUpperCase()}, ${allFindings.length} total finding(s)`,
@@ -153,7 +153,8 @@ export async function runAudit(
   return {
     overall_risk: overallRisk,
     summary: `Audit complete. Overall risk: ${overallRisk.toUpperCase()}. Found ${allFindings.length} issue(s). Review agent ${additionalFindings.length > 0 ? `added ${additionalFindings.length} additional finding(s)` : "confirmed initial assessment"}.`,
-    narrative_report: narrative,
+    executive_summary,
+    narrative_report: full_report,
     findings: allFindings,
     missing_metadata: [...new Set(missingMetadata)],
     clarifying_questions: clarifyingQuestions,

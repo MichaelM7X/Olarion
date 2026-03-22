@@ -47,6 +47,7 @@ export interface AuditFinding {
 export interface AuditReport {
   overall_risk: Severity;
   summary: string;
+  executive_summary?: string;
   narrative_report: string;
   findings: AuditFinding[];
   missing_metadata: string[];

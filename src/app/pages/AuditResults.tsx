@@ -186,6 +186,17 @@ export function AuditResults() {
   const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState<'all' | Severity>('all');
   const [leakageFilter, setLeakageFilter] = useState<'all' | LeakageType>('all');
+  const [reportExpanded, setReportExpanded] = useState(false);
+
+  const executiveSummaryText = useMemo(() => {
+    if (!report) return '';
+    console.log("[AuditResults] report.executive_summary:", typeof report.executive_summary, report.executive_summary ? `"${report.executive_summary.slice(0, 200)}..."` : report.executive_summary);
+    console.log("[AuditResults] report.summary:", typeof report.summary, `"${report.summary?.slice(0, 100)}"`);
+    console.log("[AuditResults] report.narrative_report length:", report.narrative_report?.length);
+    if (report.executive_summary) return report.executive_summary;
+    const narrative = report.narrative_report ?? '';
+    return narrative.length > 400 ? narrative.slice(0, 400) + '…' : narrative;
+  }, [report]);
 
   const severityCounts = useMemo(() => {
     const map: Record<string, number> = { all: findings.length, critical: 0, high: 0, medium: 0, low: 0 };
@@ -211,6 +222,55 @@ export function AuditResults() {
     hidden: { opacity: 0, y: 10 },
     visible: { opacity: 1, y: 0 },
   };
+
+  const markdownComponents = useMemo(() => ({
+    p: ({ children }: { children?: React.ReactNode }) => (
+      <p className="text-sm text-[var(--foreground)] leading-relaxed mb-4 last:mb-0">{children}</p>
+    ),
+    h1: ({ children }: { children?: React.ReactNode }) => (
+      <h1 className="text-lg font-semibold text-[var(--foreground)] mt-6 mb-3 first:mt-0">{children}</h1>
+    ),
+    h2: ({ children }: { children?: React.ReactNode }) => (
+      <h2 className="text-base font-semibold text-[var(--foreground)] mt-6 mb-2 first:mt-0">{children}</h2>
+    ),
+    h3: ({ children }: { children?: React.ReactNode }) => (
+      <h3 className="text-sm font-semibold text-[var(--foreground)] mt-5 mb-2 first:mt-0">{children}</h3>
+    ),
+    strong: ({ children }: { children?: React.ReactNode }) => (
+      <strong className="font-semibold text-[var(--foreground)]">{children}</strong>
+    ),
+    ul: ({ children }: { children?: React.ReactNode }) => (
+      <ul className="list-disc list-outside pl-5 space-y-1 mb-4 text-sm text-[var(--foreground)]">{children}</ul>
+    ),
+    ol: ({ children }: { children?: React.ReactNode }) => (
+      <ol className="list-decimal list-outside pl-5 space-y-1.5 mb-4 text-sm text-[var(--foreground)]">{children}</ol>
+    ),
+    li: ({ children }: { children?: React.ReactNode }) => (
+      <li className="leading-relaxed">{children}</li>
+    ),
+    code: ({ children, className }: { children?: React.ReactNode; className?: string }) => {
+      const isBlock = className?.includes('language-');
+      if (isBlock) {
+        return (
+          <code className="block w-full rounded-lg bg-slate-50 border border-[var(--border)] px-4 py-3 text-xs font-mono text-slate-700 overflow-x-auto my-3">
+            {children}
+          </code>
+        );
+      }
+      return (
+        <code className="px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--accent-primary)] text-xs font-mono border border-[var(--border)]">
+          {children}
+        </code>
+      );
+    },
+    pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+    blockquote: ({ children }: { children?: React.ReactNode }) => (
+      <blockquote className="border-l-2 border-[var(--accent-primary)]/40 pl-4 italic text-[var(--muted-foreground)] my-3">
+        {children}
+      </blockquote>
+    ),
+    hr: () => <hr className="border-[var(--border)]/50 my-4" />,
+  }), []);
 
   if (!request) {
     return (
@@ -500,60 +560,40 @@ export function AuditResults() {
 
           <div className="bg-white/65 backdrop-blur-sm rounded-xl border border-[var(--border)]/60">
             <div className="px-8 py-8">
-              <ReactMarkdown
-                components={{
-                  p: ({ children }) => (
-                    <p className="text-sm text-[var(--foreground)] leading-relaxed mb-4 last:mb-0">
-                      {children}
-                    </p>
-                  ),
-                  h1: ({ children }) => (
-                    <h1 className="text-lg font-semibold text-[var(--foreground)] mt-6 mb-3 first:mt-0">{children}</h1>
-                  ),
-                  h2: ({ children }) => (
-                    <h2 className="text-base font-semibold text-[var(--foreground)] mt-6 mb-2 first:mt-0">{children}</h2>
-                  ),
-                  h3: ({ children }) => (
-                    <h3 className="text-sm font-semibold text-[var(--foreground)] mt-5 mb-2 first:mt-0">{children}</h3>
-                  ),
-                  strong: ({ children }) => (
-                    <strong className="font-semibold text-[var(--foreground)]">{children}</strong>
-                  ),
-                  ul: ({ children }) => (
-                    <ul className="list-disc list-outside pl-5 space-y-1 mb-4 text-sm text-[var(--foreground)]">{children}</ul>
-                  ),
-                  ol: ({ children }) => (
-                    <ol className="list-decimal list-outside pl-5 space-y-1.5 mb-4 text-sm text-[var(--foreground)]">{children}</ol>
-                  ),
-                  li: ({ children }) => (
-                    <li className="leading-relaxed">{children}</li>
-                  ),
-                  code: ({ children, className }) => {
-                    const isBlock = className?.includes('language-');
-                    if (isBlock) {
-                      return (
-                        <code className="block w-full rounded-lg bg-slate-50 border border-[var(--border)] px-4 py-3 text-xs font-mono text-slate-700 overflow-x-auto my-3">
-                          {children}
-                        </code>
-                      );
-                    }
-                    return (
-                      <code className="px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--accent-primary)] text-xs font-mono border border-[var(--border)]">
-                        {children}
-                      </code>
-                    );
-                  },
-                  pre: ({ children }) => <>{children}</>,
-                  blockquote: ({ children }) => (
-                    <blockquote className="border-l-2 border-[var(--accent-primary)]/40 pl-4 italic text-[var(--muted-foreground)] my-3">
-                      {children}
-                    </blockquote>
-                  ),
-                  hr: () => <hr className="border-[var(--border)]/50 my-4" />,
-                }}
+              <div className="space-y-3">
+                {executiveSummaryText.split('\n').filter((l) => l.trim()).map((line, i) => (
+                  <p key={i} className="text-sm text-[var(--foreground)] leading-relaxed">
+                    {line.trim()}
+                  </p>
+                ))}
+              </div>
+
+              {reportExpanded && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="mt-6 pt-6 border-t border-[var(--border)]/50"
+                >
+                  <ReactMarkdown
+                    components={markdownComponents}
+                  >
+                    {auditReportText}
+                  </ReactMarkdown>
+                </motion.div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setReportExpanded(!reportExpanded)}
+                className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-[var(--accent-primary)] hover:text-[var(--accent-primary)]/80 transition-colors"
               >
-                {auditReportText}
-              </ReactMarkdown>
+                {reportExpanded ? (
+                  <>Collapse <ChevronUp className="w-4 h-4" /></>
+                ) : (
+                  <>Expand full report <ChevronDown className="w-4 h-4" /></>
+                )}
+              </button>
             </div>
           </div>
         </motion.div>

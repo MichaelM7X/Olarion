@@ -25,6 +25,7 @@ export async function callOpenAIJson(
     });
 
     const text = response.choices[0]?.message?.content?.trim() ?? "{}";
+    console.log("[callOpenAIJson] Raw LLM text (first 800 chars):", text.slice(0, 800));
     return JSON.parse(text);
   } catch (error) {
     console.error("OpenAI API error:", error);
