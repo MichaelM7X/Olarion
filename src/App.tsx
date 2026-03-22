@@ -27,6 +27,11 @@ const traceSteps = [
       "Rules + code audit review split design, repeated entities, and global preprocessing.",
   },
   {
+    title: "Review Agent",
+    detail:
+      "Agent autonomously decides whether to cross-check, deep-dive, or verify feature interactions.",
+  },
+  {
     title: "Generate narrative report",
     detail: "LLM writes evidence-backed findings, fixes, and follow-up questions.",
   },
@@ -296,10 +301,10 @@ export default function App() {
               </ul>
             </div>
             <div className="hero-card">
-              <span className="hero-kicker">Orchestrator + Tools</span>
+              <span className="hero-kicker">Orchestrator + Review Agent</span>
               <p>
-                Rules engine and LLM detectors work in parallel, each handling
-                what they do best.
+                Fixed pipeline guarantees coverage. Review Agent autonomously
+                decides whether to dig deeper.
               </p>
             </div>
           </div>
@@ -768,11 +773,18 @@ export default function App() {
                       >
                         <div className="finding-head">
                           <strong>{finding.flagged_object}</strong>
-                          <span
-                            className={riskLabelClass(finding.severity)}
-                          >
-                            {finding.severity}
-                          </span>
+                          <div className="finding-badges">
+                            {finding.id.startsWith("review-") && (
+                              <span className="review-agent-badge">
+                                Review Agent
+                              </span>
+                            )}
+                            <span
+                              className={riskLabelClass(finding.severity)}
+                            >
+                              {finding.severity}
+                            </span>
+                          </div>
                         </div>
                         <p>{finding.title}</p>
                         <div className="finding-meta">
