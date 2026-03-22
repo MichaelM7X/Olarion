@@ -8,7 +8,38 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
 
+const auditLimiter = new Map<string, number>();
+const AUDIT_COOLDOWN_MS = 10_000;
+
+function isRateLimited(ip: string): boolean {
+  const last = auditLimiter.get(ip);
+  if (last && Date.now() - last < AUDIT_COOLDOWN_MS) return true;
+  auditLimiter.set(ip, Date.now());
+  return false;
+}
+
+function validateAuditRequest(body: Record<string, unknown>): string | null {
+  const req = body.request as Record<string, unknown> | undefined;
+  if (!req || typeof req !== "object") return "Missing 'request' object in body";
+  if (!req.prediction_goal || typeof req.prediction_goal !== "string") return "Missing or invalid 'prediction_goal'";
+  if (!Array.isArray(req.csv_columns) || req.csv_columns.length === 0) return "Missing or empty 'csv_columns' array";
+  if (typeof req.preprocessing_code !== "string") return "Missing 'preprocessing_code' string";
+  return null;
+}
+
 app.post("/api/audit", async (req, res) => {
+  const ip = req.ip ?? "unknown";
+  if (isRateLimited(ip)) {
+    res.status(429).json({ error: "Too many requests. Please wait before starting another audit." });
+    return;
+  }
+
+  const validationError = validateAuditRequest(req.body);
+  if (validationError) {
+    res.status(400).json({ error: validationError });
+    return;
+  }
+
   try {
     const { request } = req.body;
     const report = await runAudit(request);
@@ -20,6 +51,18 @@ app.post("/api/audit", async (req, res) => {
 });
 
 app.post("/api/audit-stream", async (req, res) => {
+  const ip = req.ip ?? "unknown";
+  if (isRateLimited(ip)) {
+    res.status(429).json({ error: "Too many requests. Please wait before starting another audit." });
+    return;
+  }
+
+  const validationError = validateAuditRequest(req.body);
+  if (validationError) {
+    res.status(400).json({ error: validationError });
+    return;
+  }
+
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -48,6 +91,10 @@ app.post("/api/audit-stream", async (req, res) => {
 app.post("/api/chat", async (req, res) => {
   try {
     const { question, report, request, history } = req.body;
+    if (!question || typeof question !== "string") {
+      res.status(400).json({ error: "Missing 'question' string" });
+      return;
+    }
     const answer = await answerQuestion(
       question,
       report,
@@ -117,5 +164,5 @@ Rules:
 
 const PORT = process.env.PORT ?? 3001;
 app.listen(Number(PORT), () => {
-  console.log(`Clarion API running on http://localhost:${PORT}`);
+  console.log(`Olarion API running on http://localhost:${PORT}`);
 });

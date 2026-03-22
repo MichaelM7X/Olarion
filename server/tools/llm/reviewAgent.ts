@@ -1,10 +1,15 @@
-import { AuditRequest, AuditFinding, EvidenceItem } from "../../../src/types";
+import { AuditRequest, AuditFinding, EvidenceItem, AgentTraceEntry } from "../../../src/types";
 import { client, callOpenAIJson } from "../../openaiClient";
 import { extractSnippet } from "../../utils";
 import type {
   ChatCompletionTool,
   ChatCompletionMessageParam,
 } from "openai/resources/chat/completions";
+
+export interface ReviewAgentResult {
+  findings: AuditFinding[];
+  trace: AgentTraceEntry[];
+}
 
 const REVIEW_TOOLS: ChatCompletionTool[] = [
   {
@@ -327,9 +332,10 @@ Respond in JSON:
 export async function reviewAgent(
   request: AuditRequest,
   phase1Findings: AuditFinding[],
-): Promise<AuditFinding[]> {
+): Promise<ReviewAgentResult> {
   const MAX_ROUNDS = 3;
   const additionalFindings: AuditFinding[] = [];
+  const trace: AgentTraceEntry[] = [];
 
   const findingsSummary = phase1Findings
     .map(
@@ -343,7 +349,7 @@ export async function reviewAgent(
   );
   const featureList = featureColumns.map((f) => `- ${f}`).join("\n");
 
-  const systemPrompt = `You are the Review Agent for Clarion, an ML pipeline auditor.
+  const systemPrompt = `You are the Review Agent for Olarion, an ML pipeline auditor.
 
 Phase 1 of the audit has completed. Your job is to review the initial findings and decide 
 if any additional checks are needed. You have access to tools for:
@@ -456,11 +462,19 @@ Review these findings and decide if any additional checks are needed.`;
         case "finalize_review":
           console.log(`[Review Agent]   → finalize_review: "${args.summary}"`);
           console.log(`[Review Agent] Done. Additional findings: ${additionalFindings.length}`);
-          return additionalFindings;
+          trace.push({ round: round + 1, tool_called: "finalize_review", arguments: args, result_summary: args.summary });
+          return { findings: additionalFindings, trace };
 
         default:
           toolResult = "Unknown tool called.";
       }
+
+      trace.push({
+        round: round + 1,
+        tool_called: toolCall.function.name,
+        arguments: args,
+        result_summary: toolResult,
+      });
 
       console.log(`[Review Agent]   Result: ${toolResult}`);
       additionalFindings.push(...newFindings);
@@ -474,5 +488,5 @@ Review these findings and decide if any additional checks are needed.`;
   }
 
   console.log(`[Review Agent] Max rounds reached. Additional findings: ${additionalFindings.length}`);
-  return additionalFindings;
+  return { findings: additionalFindings, trace };
 }

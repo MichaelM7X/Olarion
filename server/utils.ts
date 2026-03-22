@@ -1,4 +1,4 @@
-import { AuditFinding, EvidenceItem, Severity } from "../src/types";
+import { AuditFinding, Severity } from "../src/types";
 
 const severityRank: Record<string, number> = {
   low: 1,
@@ -49,37 +49,33 @@ export function extractSnippet(
     .join("\n");
 }
 
-export function codeEvidence(
-  text: string,
-  sourceType: "preprocessing_code" | "model_training_code",
+export function resolveLineLocation(
   code: string,
+  filename: string,
   keyword: string,
-): EvidenceItem {
+): string {
   const line = findLineNumber(code, keyword);
-  const fileName = sourceType === "preprocessing_code" ? "preprocessing.py" : "training.py";
-  const location = line ? `line ${line}` : "keyword match";
-  return {
-    claim: text,
-    source: { filename: fileName, location, snippet: extractSnippet(code, keyword) },
-  };
+  if (line) return `${filename} line ${line}: ${code.split("\n")[line - 1]?.trim() ?? keyword}`;
+  return `${filename}: ${keyword}`;
 }
 
-export function llmEvidence(text: string): EvidenceItem {
-  return {
-    claim: text,
-    source: { filename: "LLM analysis", location: "semantic reasoning" },
-  };
-}
-
-export function csvEvidence(text: string, columns: string[]): EvidenceItem {
-  return {
-    claim: text,
-    source: {
-      filename: "dataset.csv",
-      location: `columns: ${columns.join(", ")}`,
-      snippet: columns.join(", "),
-    },
-  };
+export function validateFeatureNames(
+  flagged: string[],
+  validColumns: string[],
+): { valid: string[]; hallucinated: string[] } {
+  const valid: string[] = [];
+  const hallucinated: string[] = [];
+  for (const name of flagged) {
+    if (validColumns.includes(name)) {
+      valid.push(name);
+    } else {
+      hallucinated.push(name);
+    }
+  }
+  if (hallucinated.length > 0) {
+    console.warn(`[validateFeatureNames] Discarded hallucinated columns: ${hallucinated.join(", ")}`);
+  }
+  return { valid, hallucinated };
 }
 
 export function computeOverallRisk(findings: AuditFinding[]): Severity {

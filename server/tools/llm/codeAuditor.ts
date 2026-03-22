@@ -1,11 +1,29 @@
 import { AuditRequest, AuditFinding, EvidenceItem } from "../../../src/types";
 import { callOpenAIJson } from "../../openaiClient";
-import { extractSnippet } from "../../utils";
+import { resolveLineLocation } from "../../utils";
 
 export interface CodeAuditResult {
   split_method: string | null;
   detected_entity_keys: string[];
   findings: AuditFinding[];
+}
+
+const CODE_AUDIT_RULE_CITED =
+  "Train/test split must precede all data transformations (sklearn pipeline best practice)";
+
+function severityRationale(severity: string): string {
+  switch (severity) {
+    case "critical":
+      return "Critical: this issue directly compromises model validity";
+    case "high":
+      return "High: substantial risk to unbiased evaluation and reliable deployment metrics";
+    case "medium":
+      return "Medium: may skew train/test behavior or obscure subtler leakage";
+    case "low":
+      return "Low: smaller impact on validity but still worth addressing for rigor";
+    default:
+      return "Severity reflects estimated impact on data leakage and model validity.";
+  }
 }
 
 export async function auditPreprocessingCode(
@@ -63,6 +81,48 @@ Respond in this exact JSON format:
 }`;
 
   const result = await callOpenAIJson(systemPrompt, userPrompt);
+
+  if (!result.issues && !result.split_method) {
+    return {
+      split_method: null,
+      detected_entity_keys: [],
+      findings: [
+        {
+          id: "diagnostic-code-auditor",
+          title: "Preprocessing code audit returned an empty or incomplete response",
+          macro_bucket: "Structure / pipeline leakage",
+          fine_grained_type: "evaluation",
+          severity: "medium",
+          severity_rationale: severityRationale("medium"),
+          confidence: "low",
+          flagged_object: "LLM preprocessing code audit",
+          rule_cited: CODE_AUDIT_RULE_CITED,
+          evidence: [
+            {
+              claim:
+                "The model response did not include both `issues` and `split_method`; the audit could not be completed reliably.",
+              source: {
+                filename: "preprocessing_code.py",
+                location: resolveLineLocation(
+                  request.preprocessing_code,
+                  "preprocessing_code.py",
+                  "",
+                ),
+              },
+            },
+          ],
+          why_it_matters:
+            "Without a structured audit result, preprocessing leakage may go undetected.",
+          fix_recommendation: [
+            "Retry the audit after checking API connectivity.",
+            "Manually verify that train/test split happens before any fit/transform on the full data.",
+          ],
+          needs_human_review: true,
+        },
+      ],
+    };
+  }
+
   const issues = (result.issues as Array<Record<string, unknown>>) ?? [];
 
   const bucketMap: Record<string, string> = {
@@ -73,31 +133,40 @@ Respond in this exact JSON format:
 
   const code = request.preprocessing_code ?? "";
   const findings: AuditFinding[] = issues.map((issue, i) => {
+    const sev = String(issue.severity ?? "medium") as AuditFinding["severity"];
     const rawEvidence = (issue.evidence as Array<Record<string, unknown>>) ?? [];
-    const codeRef = String(issue.code_reference ?? "");
-    const evidence: EvidenceItem[] = rawEvidence.length > 0
-      ? rawEvidence.map((e) => {
-          const loc = String(((e.source as Record<string, unknown>)?.location) ?? codeRef || "N/A");
-          const keyword = loc.replace(/^line\s*\d+[,:]?\s*/i, "").trim() || codeRef;
-          return {
-            claim: String((e.claim as string) ?? issue.description ?? "Issue detected"),
-            source: {
-              filename: String(((e.source as Record<string, unknown>)?.filename) ?? "preprocessing_code.py"),
-              location: loc,
-              snippet: keyword ? extractSnippet(code, keyword) : undefined,
+    const evidence: EvidenceItem[] =
+      rawEvidence.length > 0
+        ? rawEvidence.map((e) => {
+            const src = (e.source as Record<string, unknown>) ?? {};
+            const keyword = String(
+              (src.location as string) ?? issue.code_reference ?? "",
+            );
+            return {
+              claim: String((e.claim as string) ?? issue.description ?? "Issue detected"),
+              source: {
+                filename: String(src.filename ?? "preprocessing_code.py"),
+                location: resolveLineLocation(
+                  request.preprocessing_code,
+                  "preprocessing_code.py",
+                  keyword,
+                ),
+              },
+            };
+          })
+        : [
+            {
+              claim: `Code analysis found: ${issue.description}`,
+              source: {
+                filename: "preprocessing_code.py",
+                location: resolveLineLocation(
+                  request.preprocessing_code,
+                  "preprocessing_code.py",
+                  String(issue.code_reference ?? ""),
+                ),
+              },
             },
-          };
-        })
-      : [
-          {
-            claim: `Code analysis found: ${issue.description}`,
-            source: {
-              filename: "preprocessing_code.py",
-              location: codeRef || "N/A",
-              snippet: codeRef ? extractSnippet(code, codeRef) : undefined,
-            },
-          },
-        ];
+          ];
 
     return {
       id: `code-audit-${i}`,
@@ -105,9 +174,11 @@ Respond in this exact JSON format:
       macro_bucket: (bucketMap[String(issue.leakage_type ?? "")] ??
         "Structure / pipeline leakage") as AuditFinding["macro_bucket"],
       fine_grained_type: "evaluation" as AuditFinding["fine_grained_type"],
-      severity: String(issue.severity ?? "medium") as AuditFinding["severity"],
+      severity: sev,
+      severity_rationale: severityRationale(sev),
       confidence: "high" as AuditFinding["confidence"],
       flagged_object: String(issue.code_reference ?? "preprocessing code"),
+      rule_cited: CODE_AUDIT_RULE_CITED,
       evidence,
       why_it_matters: "Code-level leakage is concrete and verifiable.",
       fix_recommendation: ["Fix the identified issue in your preprocessing pipeline."],
@@ -117,8 +188,7 @@ Respond in this exact JSON format:
 
   return {
     split_method: String(result.split_method ?? null),
-    detected_entity_keys:
-      (result.detected_entity_keys as string[]) ?? [],
+    detected_entity_keys: (result.detected_entity_keys as string[]) ?? [],
     findings,
   };
 }

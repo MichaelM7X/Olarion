@@ -50,6 +50,7 @@ export interface AuditFinding {
   macro_bucket: MacroBucket;
   fine_grained_type: FineGrainedLeakageType;
   severity: Severity;
+  severity_rationale?: string;
   confidence: Confidence;
   flagged_object: string;
   evidence: EvidenceItem[];
@@ -58,6 +59,13 @@ export interface AuditFinding {
   why_it_matters: string;
   fix_recommendation: string[];
   needs_human_review: boolean;
+}
+
+export interface AgentTraceEntry {
+  round: number;
+  tool_called: string;
+  arguments: Record<string, unknown>;
+  result_summary: string;
 }
 
 export interface AuditReport {
@@ -69,6 +77,7 @@ export interface AuditReport {
   missing_metadata: string[];
   clarifying_questions: string[];
   bucket_summary: Record<MacroBucket, number>;
+  agent_trace?: AgentTraceEntry[];
 }
 
 export interface AgentMessage {

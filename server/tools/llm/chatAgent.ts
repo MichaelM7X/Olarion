@@ -14,7 +14,7 @@ export async function answerQuestion(
     )
     .join("\n");
 
-  const systemPrompt = `You are Clarion, an ML data leakage auditor agent.
+  const systemPrompt = `You are Olarion, an ML data leakage auditor agent.
 You completed an audit of the following ML pipeline:
 
 Prediction Goal: ${request.prediction_goal}
