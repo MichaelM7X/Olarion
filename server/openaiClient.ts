@@ -1,4 +1,38 @@
+import fs from "node:fs";
+import path from "node:path";
 import OpenAI from "openai";
+
+function loadLocalEnvIfPresent() {
+  const envPath = path.resolve(process.cwd(), ".env");
+  if (!fs.existsSync(envPath)) {
+    return;
+  }
+
+  const envText = fs.readFileSync(envPath, "utf8");
+  for (const line of envText.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex === -1) {
+      continue;
+    }
+
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const value = trimmed
+      .slice(separatorIndex + 1)
+      .trim()
+      .replace(/^['"]|['"]$/g, "");
+
+    if (key && process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+}
+
+loadLocalEnvIfPresent();
 
 // SDK v6 throws if apiKey is absent; use a placeholder so the server can boot
 // without .env (audit/chat calls will fail until OPENAI_API_KEY is set).

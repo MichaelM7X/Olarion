@@ -1,6 +1,46 @@
 import { AuditRequest, AuditFinding, EvidenceItem } from "../../../src/types";
 import { callOpenAIJson } from "../../openaiClient";
-import { extractSnippet } from "../../utils";
+import { validateFeatureNames, extractSnippet } from "../../utils";
+
+const RULE_CITED =
+  "Features causally downstream of the target constitute proxy leakage (Kaufman et al. 2012)";
+
+function isMalformedAnalysisResult(result: Record<string, unknown>): boolean {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return true;
+  if (Object.keys(result).length === 0) return true;
+  if (!("analysis" in result)) return true;
+  if (!Array.isArray(result.analysis)) return true;
+  return false;
+}
+
+function diagnosticProxyFinding(): AuditFinding {
+  return {
+    id: "diagnostic-proxy-detector",
+    title: "Proxy detection could not complete — manual review needed",
+    macro_bucket: "Feature / proxy leakage",
+    fine_grained_type: "proxy",
+    severity: "medium",
+    severity_rationale:
+      "Unable to assess — LLM analysis returned no results",
+    confidence: "low",
+    flagged_object: "proxy detection tool",
+    evidence: [
+      {
+        claim: "OpenAI API returned empty or malformed response.",
+        source: { filename: "system", location: "proxyDetector" },
+      },
+    ],
+    rule_cited: RULE_CITED,
+    escalate_reason:
+      "Automated proxy analysis could not complete. A human reviewer should manually inspect features for target proxies.",
+    why_it_matters:
+      "Proxy leakage check was inconclusive — issues may exist but were not detected.",
+    fix_recommendation: [
+      "Manually review each feature for causal relationship to the target variable.",
+    ],
+    needs_human_review: true,
+  };
+}
 
 export async function detectProxyLeakage(
   request: AuditRequest,
@@ -54,11 +94,26 @@ Respond in this exact JSON format:
 }`;
 
   const result = await callOpenAIJson(systemPrompt, userPrompt);
-  const analysis = (result.analysis as Array<Record<string, unknown>>) ?? [];
+  if (isMalformedAnalysisResult(result)) {
+    return [diagnosticProxyFinding()];
+  }
+
+  const analysis = result.analysis as Array<Record<string, unknown>>;
+  const flaggedItems = analysis.filter((item) => item.is_proxy === true);
+  const flaggedNames = flaggedItems.map((item) =>
+    String(item.feature_name ?? ""),
+  );
+  const { valid: validFeatureNames } = validateFeatureNames(
+    flaggedNames,
+    request.csv_columns,
+  );
+  const validSet = new Set(validFeatureNames);
+
   const findings: AuditFinding[] = [];
 
-  for (const item of analysis) {
-    if (!item.is_proxy) continue;
+  for (const item of flaggedItems) {
+    const featureName = String(item.feature_name ?? "unknown");
+    if (!validSet.has(featureName)) continue;
 
     const conf = String(item.confidence ?? "medium");
     const severityMap: Record<string, string> = {
@@ -66,45 +121,64 @@ Respond in this exact JSON format:
       medium: "high",
       low: "medium",
     };
+    const severity = (severityMap[conf] ?? "medium") as AuditFinding["severity"];
+
+    const severityRationaleByConf: Record<string, string> = {
+      high:
+        "High-confidence assessment that this feature is causally downstream of or restates the target.",
+      medium:
+        "Moderate confidence that this feature may act as a target proxy.",
+      low:
+        "Low-confidence signal; proxy relationship is uncertain and requires human verification.",
+    };
 
     const rawEvidence = (item.evidence as Array<Record<string, unknown>>) ?? [];
-    const featureName = String(item.feature_name ?? "unknown");
     const code = request.preprocessing_code ?? "";
-    const evidence: EvidenceItem[] = rawEvidence.length > 0
-      ? rawEvidence.map((e) => {
-          const fname = String(((e.source as Record<string, unknown>)?.filename) ?? "dataset.csv");
-          const loc = String(((e.source as Record<string, unknown>)?.location) ?? `column '${item.feature_name}'`);
-          const snippet = fname.includes(".py") || fname.includes("code")
-            ? extractSnippet(code, featureName)
-            : featureName;
-          return {
-            claim: String((e.claim as string) ?? item.reasoning ?? "Proxy leakage risk detected"),
-            source: { filename: fname, location: loc, snippet },
-          };
-        })
-      : [
-          {
-            claim: String(item.reasoning ?? "LLM detected proxy leakage risk."),
-            source: { filename: "dataset.csv", location: `column '${featureName}'`, snippet: featureName },
-          },
-        ];
+    const evidence: EvidenceItem[] =
+      rawEvidence.length > 0
+        ? rawEvidence.map((e) => {
+            const fname = String(((e.source as Record<string, unknown>)?.filename) ?? "dataset.csv");
+            const loc = String(((e.source as Record<string, unknown>)?.location) ?? `column '${item.feature_name}'`);
+            const snippet = fname.includes(".py") || fname.includes("code")
+              ? extractSnippet(code, featureName)
+              : featureName;
+            return {
+              claim: String((e.claim as string) ?? item.reasoning ?? "Proxy leakage risk detected"),
+              source: { filename: fname, location: loc, snippet },
+            };
+          })
+        : [
+            {
+              claim: String(item.reasoning ?? "LLM detected proxy leakage risk."),
+              source: { filename: "dataset.csv", location: `column '${featureName}'`, snippet: featureName },
+            },
+          ];
 
-    findings.push({
+    const finding: AuditFinding = {
       id: `proxy-${featureName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
       title: `${featureName} appears to be a proxy for the target`,
       macro_bucket: "Feature / proxy leakage",
       fine_grained_type: "proxy",
-      severity: (severityMap[conf] ?? "medium") as AuditFinding["severity"],
+      severity,
+      severity_rationale:
+        severityRationaleByConf[conf] ?? severityRationaleByConf.medium,
       confidence: conf as AuditFinding["confidence"],
       flagged_object: featureName,
       evidence,
+      rule_cited: RULE_CITED,
       why_it_matters:
         "The model may be reading the answer key instead of learning predictive patterns.",
       fix_recommendation: [
         `Remove ${featureName} from the feature set, or redefine the prediction boundary.`,
       ],
       needs_human_review: conf !== "high",
-    });
+    };
+
+    if (conf === "low") {
+      finding.escalate_reason = `Confidence is low — the agent cannot determine with certainty whether ${featureName} is a target proxy. Human domain expertise recommended.`;
+    }
+
+    findings.push(finding);
   }
 
   return findings;

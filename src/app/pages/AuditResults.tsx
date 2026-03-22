@@ -23,7 +23,7 @@ import { InlineChat } from '../components/InlineChat';
 import type { SharedChatState, ChatMessage } from '../hooks/useChat';
 import { Navigation } from '../components/Navigation';
 import { Footer } from '../components/Footer';
-import type { AuditFinding, AuditReport, AuditRequest, EvidenceItem, Severity } from '../../types';
+import type { AuditFinding, AuditReport, AuditRequest, EvidenceItem, Severity, AgentTraceEntry } from '../../types';
 import { auditWithStream, type ThinkingStep } from '../../lib/llmEngine';
 import { buildAuditRecord, saveAuditRecord } from '../lib/storage';
 import { downloadAuditZip } from '../lib/exportZip';
@@ -36,11 +36,13 @@ interface UiFinding {
   feature: string;
   leakageType: LeakageType;
   severity: Severity;
+  severityRationale: string | null;
   confidence: AuditFinding['confidence'];
   evidence: EvidenceItem[];
   recommendation: string;
   humanReviewRequired: boolean;
   escalateReason: string | null;
+  ruleCited: string | null;
   title: string;
   whyItMatters: string;
 }
@@ -68,11 +70,13 @@ function mapFinding(f: AuditFinding): UiFinding {
     feature: f.flagged_object,
     leakageType: macroToLeakage(f.macro_bucket),
     severity: f.severity,
+    severityRationale: f.severity_rationale ?? null,
     confidence: f.confidence,
     evidence: f.evidence.map(normalizeEvidence),
     recommendation: f.fix_recommendation.join(' '),
     humanReviewRequired: f.needs_human_review,
     escalateReason: f.escalate_reason ?? null,
+    ruleCited: f.rule_cited ?? null,
     title: f.title,
     whyItMatters: f.why_it_matters,
   };
@@ -637,6 +641,37 @@ export function AuditResults() {
           </div>
         </motion.div>
 
+        {/* Agent Trace */}
+        {report.agent_trace && report.agent_trace.length > 0 && (
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={fadeInVariants}
+            transition={{ delay: 0.25 }}
+            className="mb-10"
+          >
+            <AgentTraceSection trace={report.agent_trace} />
+          </motion.div>
+        )}
+
+        {/* Privacy info */}
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={fadeInVariants}
+          transition={{ delay: 0.28 }}
+          className="mb-10"
+        >
+          <div className="flex items-start gap-3 px-5 py-3.5 rounded-xl bg-emerald-50/60 border border-emerald-200/50 text-xs text-emerald-800">
+            <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <p>
+              <span className="font-semibold">Privacy:</span> Olarion processes your data in-session only.
+              No uploaded files, code, or audit results are stored on our servers or shared with third parties.
+              LLM calls are made directly to OpenAI using your own API key.
+            </p>
+          </div>
+        </motion.div>
+
         <motion.div
           initial="hidden"
           animate="visible"
@@ -666,14 +701,14 @@ export function AuditResults() {
         </motion.div>
       </div>
 
-      {/* Ask Olarion inline chat */}
+      {/* Ask Olarion inline chat — same column width as findings / report above */}
       <motion.div
         ref={ctaRef}
         initial="hidden"
         animate="visible"
         variants={fadeInVariants}
         transition={{ delay: 0.4 }}
-        className="max-w-7xl mx-auto px-8 mb-16"
+        className="max-w-5xl mx-auto px-8 pb-16 relative z-10"
       >
         <div className="mb-6">
           <h2 className="text-2xl text-[var(--foreground)] mb-2">Ask Olarion</h2>
@@ -987,6 +1022,24 @@ function FindingItem({
           onClick={(e) => e.stopPropagation()}
           className="mt-6 ml-[60px] space-y-5 border-l border-[var(--border)]/50 pl-6"
         >
+          {finding.ruleCited && (
+            <div className="flex items-start gap-2 text-xs text-[var(--muted-foreground)] bg-slate-50 rounded-lg px-3 py-2 border border-[var(--border)]/40">
+              <FileText className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-[var(--accent-primary)]" />
+              <span><span className="font-medium text-[var(--foreground)]">Rule:</span> {finding.ruleCited}</span>
+            </div>
+          )}
+          {finding.severityRationale && (
+            <div className="flex items-start gap-2 text-xs text-[var(--muted-foreground)] bg-amber-50/60 rounded-lg px-3 py-2 border border-amber-200/40">
+              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-amber-600" />
+              <span><span className="font-medium text-[var(--foreground)]">Severity rationale:</span> {finding.severityRationale}</span>
+            </div>
+          )}
+          {finding.escalateReason && (
+            <div className="flex items-start gap-2 text-xs text-[var(--muted-foreground)] bg-blue-50/60 rounded-lg px-3 py-2 border border-blue-200/40">
+              <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-blue-600" />
+              <span><span className="font-medium text-[var(--foreground)]">Escalation:</span> {finding.escalateReason}</span>
+            </div>
+          )}
           <div>
             <h4 className="text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-3 font-medium">
               Why it matters
@@ -1198,6 +1251,47 @@ function renderReportInline(text: string): React.ReactNode[] {
     nodes.push(text.slice(lastIdx));
   }
   return nodes;
+}
+
+function AgentTraceSection({ trace }: { trace: AgentTraceEntry[] }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="bg-white/65 backdrop-blur-sm rounded-xl border border-[var(--border)]/60">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-8 py-5 text-left"
+      >
+        <div>
+          <h2 className="text-lg text-[var(--foreground)] font-medium">Review Agent Trace</h2>
+          <p className="text-xs text-[var(--muted-foreground)] mt-1">
+            {trace.length} tool call{trace.length !== 1 ? 's' : ''} during Phase 2 review
+          </p>
+        </div>
+        {expanded ? <ChevronUp className="w-5 h-5 text-[var(--muted-foreground)]" /> : <ChevronDown className="w-5 h-5 text-[var(--muted-foreground)]" />}
+      </button>
+      {expanded && (
+        <div className="px-8 pb-6 space-y-3">
+          {trace.map((entry, i) => (
+            <div key={i} className="flex items-start gap-3 text-sm">
+              <span className="text-xs font-mono text-[var(--muted-foreground)] bg-[var(--secondary)] px-2 py-0.5 rounded mt-0.5 flex-shrink-0">
+                R{entry.round}
+              </span>
+              <div className="flex-1 min-w-0">
+                <code className="text-xs font-mono text-[var(--accent-primary)]">{entry.tool_called}</code>
+                {entry.arguments && Object.keys(entry.arguments).length > 0 && (
+                  <span className="text-xs text-[var(--muted-foreground)] ml-2">
+                    ({Object.entries(entry.arguments).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(', ')})
+                  </span>
+                )}
+                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">{entry.result_summary}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ActionItem({

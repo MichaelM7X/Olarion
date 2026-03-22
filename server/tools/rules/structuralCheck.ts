@@ -1,6 +1,6 @@
 import { AuditRequest, AuditFinding, EvidenceItem } from "../../../src/types";
 import { CodeAuditResult } from "../llm/codeAuditor";
-import { extractSnippet } from "../../utils";
+import { resolveLineLocation } from "../../utils";
 
 export function structuralCheck(
   request: AuditRequest,
@@ -38,12 +38,15 @@ export function structuralCheck(
   }
 
   if (splitIsRandom) {
-    const code = request.preprocessing_code ?? "";
-    const splitSnippet = extractSnippet(code, "train_test_split");
+    const trainTestSplitLocation = resolveLineLocation(
+      request.preprocessing_code ?? "",
+      "preprocessing_code.py",
+      "train_test_split",
+    );
     const structEvidence: EvidenceItem[] = [
       {
         claim: "Split method identified as random.",
-        source: { filename: "preprocessing_code.py", location: "train_test_split call", snippet: splitSnippet },
+        source: { filename: "preprocessing_code.py", location: trainTestSplitLocation },
       },
       {
         claim: `Likely entity keys: ${entityKeys.join(", ")}.`,
@@ -51,7 +54,7 @@ export function structuralCheck(
       },
       {
         claim: "Random split does not respect entity boundaries.",
-        source: { filename: "preprocessing_code.py", location: "train_test_split call", snippet: splitSnippet },
+        source: { filename: "preprocessing_code.py", location: trainTestSplitLocation },
       },
     ];
     findings.push({
@@ -60,9 +63,13 @@ export function structuralCheck(
       macro_bucket: "Structure / pipeline leakage",
       fine_grained_type: "join_entity",
       severity: "high",
+      severity_rationale:
+        "High: random split with entity IDs allows memorization of entity identity",
       confidence,
       flagged_object: entityKeys.join(", "),
       evidence: structEvidence,
+      rule_cited:
+        "Entity-level grouping required when repeated IDs exist in train/test split (GroupKFold)",
       why_it_matters:
         "Model learns entity identity rather than generalizable patterns.",
       fix_recommendation: [`Use GroupKFold with group key = ${entityKeys[0]}.`],
