@@ -8,15 +8,17 @@ import {
   CheckCircle,
   Clock,
   Network,
-  Shield,
+  Layers,
   ChevronDown,
   ChevronUp,
   Loader2,
   Download,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AmbientBackground } from '../components/AmbientBackground';
 import { FloatingChat } from '../components/FloatingChat';
+import { InlineChat } from '../components/InlineChat';
+import type { SharedChatState, ChatMessage } from '../hooks/useChat';
 import { Navigation } from '../components/Navigation';
 import { Footer } from '../components/Footer';
 import type { AuditFinding, AuditReport, AuditRequest, Severity, EvidenceCitation } from '../../types';
@@ -146,6 +148,33 @@ export function AuditResults() {
     };
   }, [report]);
 
+  const [ctaVisible, setCtaVisible] = useState(false);
+  const ctaObserverRef = useRef<IntersectionObserver | null>(null);
+
+  // Callback ref — attaches the observer the moment the element appears in the DOM,
+  // which may be after the audit finishes and the results section renders.
+  const ctaRef = useCallback((el: HTMLDivElement | null) => {
+    ctaObserverRef.current?.disconnect();
+    ctaObserverRef.current = null;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setCtaVisible(entry.isIntersecting),
+      { threshold: 0.1 },
+    );
+    observer.observe(el);
+    ctaObserverRef.current = observer;
+  }, []);
+
+  // Shared chat state so InlineChat and FloatingChat stay in sync
+  const [sharedConversation, setSharedConversation] = useState<ChatMessage[]>([]);
+  const [sharedIsThinking, setSharedIsThinking] = useState(false);
+  const sharedChat: SharedChatState = {
+    conversation: sharedConversation,
+    setConversation: setSharedConversation,
+    isThinking: sharedIsThinking,
+    setIsThinking: setSharedIsThinking,
+  };
+
   const actionItems = useMemo(() => {
     if (!report) return [];
     return [...report.findings]
@@ -155,6 +184,7 @@ export function AuditResults() {
 
   const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState<'all' | Severity>('all');
+  const [leakageFilter, setLeakageFilter] = useState<'all' | LeakageType>('all');
 
   const severityCounts = useMemo(() => {
     const map: Record<string, number> = { all: findings.length, critical: 0, high: 0, medium: 0, low: 0 };
@@ -162,10 +192,19 @@ export function AuditResults() {
     return map;
   }, [findings]);
 
+  const leakageCounts = useMemo(() => {
+    const map: Record<string, number> = { all: findings.length, temporal: 0, feature: 0, pipeline: 0 };
+    for (const f of findings) map[f.leakageType] = (map[f.leakageType] ?? 0) + 1;
+    return map;
+  }, [findings]);
+
   const filteredFindings = useMemo(() => {
-    if (severityFilter === 'all') return findings;
-    return findings.filter((f) => f.severity === severityFilter);
-  }, [findings, severityFilter]);
+    return findings.filter((f) => {
+      if (severityFilter !== 'all' && f.severity !== severityFilter) return false;
+      if (leakageFilter !== 'all' && f.leakageType !== leakageFilter) return false;
+      return true;
+    });
+  }, [findings, severityFilter, leakageFilter]);
 
   const fadeInVariants = {
     hidden: { opacity: 0, y: 10 },
@@ -202,9 +241,9 @@ export function AuditResults() {
         <div className="h-20" />
         <div className="flex flex-col items-center justify-center py-20 px-8 relative z-10">
           <div className="text-center mb-8">
-            <h2 className="text-2xl text-[var(--foreground)] font-medium mb-2">Running LeakGuard Audit</h2>
+            <h2 className="text-2xl text-[var(--foreground)] font-medium mb-2">Running Clarion Audit</h2>
             <p className="text-sm text-[var(--muted-foreground)] max-w-md">
-              The agent is analyzing your task, columns, and code for data leakage patterns.
+              Clarion is analyzing your task, columns, and code for data leakage patterns.
             </p>
           </div>
           <AuditThinking steps={thinkingSteps} />
@@ -268,7 +307,7 @@ export function AuditResults() {
           <button
             type="button"
             onClick={() => downloadAuditZip(report)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border)] bg-white text-sm text-[var(--foreground)] hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)] transition-colors shadow-sm"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border)]/60 bg-white/65 backdrop-blur-sm text-sm text-[var(--foreground)] hover:border-[var(--accent-primary)]/40 hover:text-[var(--accent-primary)] transition-colors"
           >
             <Download className="w-4 h-4" />
             Download Report
@@ -276,41 +315,65 @@ export function AuditResults() {
         </div>
 
         <motion.div initial="hidden" animate="visible" variants={fadeInVariants} className="mb-10">
-          <div className="bg-white rounded-lg border border-[var(--border)] shadow-sm">
-            <div className="px-8 py-6">
-              <div className="flex items-center justify-between flex-wrap gap-4">
-                <div className="flex items-center gap-8">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-3">
-                      Overall Risk
-                    </p>
-                    <RiskBadge severity={overallRisk} large />
-                  </div>
-                  <div className="h-16 w-px bg-[var(--border)] hidden sm:block" />
-                  <div className="grid grid-cols-3 gap-8">
-                    <StatusMetric
-                      label="Critical Findings"
-                      value={String(counts.critical)}
-                      color="text-[var(--risk-critical)]"
-                    />
-                    <StatusMetric
-                      label="High Findings"
-                      value={String(counts.high)}
-                      color="text-[var(--risk-high)]"
-                    />
-                    <StatusMetric
-                      label="Total Flagged"
-                      value={String(counts.total)}
-                      color="text-[var(--foreground)]"
-                    />
-                  </div>
+          <div className="bg-white/65 backdrop-blur-sm rounded-xl border border-[var(--border)]/60 overflow-hidden">
+            {/* Top summary row */}
+            <div className="px-8 pt-6 pb-5 flex items-start justify-between flex-wrap gap-6">
+              <div className="flex items-center gap-10">
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-[var(--muted-foreground)] mb-2">Overall Risk Level</p>
+                  <RiskBadge severity={overallRisk} large />
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-[var(--muted-foreground)] mb-1">Audit completed</p>
-                  <p className="text-sm text-[var(--foreground)]">{completedAt}</p>
+                <div className="h-12 w-px bg-[var(--border)]/60 hidden sm:block" />
+                {/* Severity counts */}
+                <div className="flex items-center gap-8">
+                  {[
+                    { label: 'Critical', count: severityCounts.critical ?? 0, color: 'text-[var(--risk-critical)]' },
+                    { label: 'High', count: severityCounts.high ?? 0, color: 'text-[var(--risk-high)]' },
+                    { label: 'Medium', count: severityCounts.medium ?? 0, color: 'text-[var(--risk-medium)]' },
+                    { label: 'Low', count: severityCounts.low ?? 0, color: 'text-lime-600' },
+                  ].map(({ label, count, color }) => (
+                    <div key={label} className="flex flex-col items-center gap-1">
+                      <span className={`text-2xl font-semibold ${color}`}>{count}</span>
+                      <span className="text-xs text-[var(--muted-foreground)]">{label}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
+              <div className="text-right">
+                <p className="text-xs text-[var(--muted-foreground)] mb-1">Audit completed</p>
+                <p className="text-sm text-[var(--foreground)]">{completedAt}</p>
+              </div>
             </div>
+
+            {/* Leakage type breakdown bar */}
+            {findings.length > 0 && (() => {
+              const temporal = findings.filter(f => f.leakageType === 'temporal').length;
+              const feature = findings.filter(f => f.leakageType === 'feature').length;
+              const pipeline = findings.filter(f => f.leakageType === 'pipeline').length;
+              const total = findings.length;
+              return (
+                <div className="px-8 pb-6">
+                  <p className="text-xs text-[var(--muted-foreground)] mb-2 uppercase tracking-widest">Leakage breakdown</p>
+                  <div className="flex h-2 rounded-full overflow-hidden gap-0.5">
+                    {temporal > 0 && <div className="bg-blue-500 transition-all duration-700" style={{ width: `${(temporal / total) * 100}%` }} />}
+                    {feature > 0 && <div className="bg-violet-400 transition-all duration-700" style={{ width: `${(feature / total) * 100}%` }} />}
+                    {pipeline > 0 && <div className="bg-blue-300 transition-all duration-700" style={{ width: `${(pipeline / total) * 100}%` }} />}
+                  </div>
+                  <div className="flex items-center gap-5 mt-2">
+                    {[
+                      { label: 'Temporal', count: temporal, color: 'bg-blue-500' },
+                      { label: 'Feature', count: feature, color: 'bg-violet-400' },
+                      { label: 'Pipeline', count: pipeline, color: 'bg-blue-300' },
+                    ].filter(x => x.count > 0).map(({ label, count, color }) => (
+                      <div key={label} className="flex items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full ${color}`} />
+                        <span className="text-xs text-[var(--muted-foreground)]">{label} <span className="font-medium text-[var(--foreground)]">({count})</span></span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </motion.div>
 
@@ -331,17 +394,69 @@ export function AuditResults() {
           </div>
 
           {findings.length === 0 ? (
-            <div className="bg-white rounded-lg border border-[var(--border)] px-8 py-12 text-center text-sm text-[var(--muted-foreground)]">
+            <div className="bg-white/65 backdrop-blur-sm rounded-xl border border-[var(--border)]/60 px-8 py-12 text-center text-sm text-[var(--muted-foreground)]">
               No issues were flagged for this submission. Review the narrative below for methodology notes.
             </div>
           ) : (
             <>
-              <SeverityFilterBar
-                active={severityFilter}
-                counts={severityCounts}
-                onChange={setSeverityFilter}
-              />
-              <div className="bg-white rounded-lg border border-[var(--border)] shadow-sm divide-y divide-[var(--border)]">
+              <div className="flex items-center gap-3 mb-4">
+                {/* Severity filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] uppercase tracking-widest text-[var(--muted-foreground)] opacity-60 select-none">Severity</span>
+                  <div className="flex items-center gap-1 p-0.5 bg-white/55 backdrop-blur-sm rounded-lg border border-[var(--border)]/50">
+                    {FILTER_OPTIONS.map(({ key, label, dot }) => {
+                      const count = severityCounts[key] ?? 0;
+                      if (key !== 'all' && count === 0) return null;
+                      const isActive = severityFilter === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setSeverityFilter(key)}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                            isActive
+                              ? 'bg-white text-[var(--foreground)] shadow-sm border border-[var(--border)]/60'
+                              : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)] border border-transparent'
+                          }`}
+                        >
+                          {dot && <span className={`w-1.5 h-1.5 rounded-full ${dot} flex-shrink-0`} />}
+                          <span>{label}</span>
+                          <span className={`text-xs ${isActive ? 'text-[var(--accent-primary)]' : 'text-[var(--muted-foreground)]'}`}>{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Leakage type filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] uppercase tracking-widest text-[var(--muted-foreground)] opacity-60 select-none">Type</span>
+                  <div className="flex items-center gap-1 p-0.5 bg-white/55 backdrop-blur-sm rounded-lg border border-[var(--border)]/50">
+                    {LEAKAGE_FILTER_OPTIONS.map(({ key, label, dot }) => {
+                      const count = leakageCounts[key] ?? 0;
+                      if (key !== 'all' && count === 0) return null;
+                      const isActive = leakageFilter === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setLeakageFilter(key)}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                            isActive
+                              ? 'bg-white text-[var(--foreground)] shadow-sm border border-[var(--border)]/60'
+                              : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)] border border-transparent'
+                          }`}
+                        >
+                          {dot && <span className={`w-1.5 h-1.5 rounded-full ${dot} flex-shrink-0`} />}
+                          <span>{label}</span>
+                          <span className={`text-xs ${isActive ? 'text-[var(--accent-primary)]' : 'text-[var(--muted-foreground)]'}`}>{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white/65 backdrop-blur-sm rounded-xl border border-[var(--border)]/60 divide-y divide-[var(--border)]/50">
                 {filteredFindings.length === 0 ? (
                   <div className="px-8 py-12 text-center text-sm text-[var(--muted-foreground)]">
                     No findings match this filter.
@@ -363,6 +478,11 @@ export function AuditResults() {
           )}
         </motion.div>
 
+        {/* Mid-page ambient gradient — purely decorative */}
+        <div className="relative h-0 overflow-visible pointer-events-none">
+          <AmbientBackground variant="midpage" className="!overflow-visible -translate-y-40" />
+        </div>
+
         <motion.div
           initial="hidden"
           animate="visible"
@@ -377,7 +497,7 @@ export function AuditResults() {
             </p>
           </div>
 
-          <div className="bg-white rounded-lg border border-[var(--border)] shadow-sm">
+          <div className="bg-white/65 backdrop-blur-sm rounded-xl border border-[var(--border)]/60">
             <div className="px-8 py-8">
               <div className="prose prose-sm max-w-none space-y-6">
                 {auditReportText.split('\n\n').map((paragraph, idx) => {
@@ -420,7 +540,7 @@ export function AuditResults() {
           animate="visible"
           variants={fadeInVariants}
           transition={{ delay: 0.3 }}
-          className="mb-16"
+          className="mb-8"
         >
           <div className="mb-6">
             <h2 className="text-2xl text-[var(--foreground)] mb-2">Recommended Actions</h2>
@@ -429,25 +549,47 @@ export function AuditResults() {
             </p>
           </div>
 
-          <div className="bg-white rounded-lg border border-[var(--border)] shadow-sm">
-            <div className="px-8 py-8 space-y-6">
-              {actionItems.map((f) => (
+          <div className="bg-white/65 backdrop-blur-sm rounded-xl border border-[var(--border)]/60 divide-y divide-[var(--border)]/50">
+              {actionItems.map((f, idx) => (
                 <ActionItem
                   key={f.id}
+                  index={idx + 1}
                   priority={f.severity.charAt(0).toUpperCase() + f.severity.slice(1)}
                   action={f.title}
                   description={[f.why_it_matters, ...f.fix_recommendation].filter(Boolean).join(' ')}
                   severity={f.severity}
                 />
               ))}
-            </div>
           </div>
         </motion.div>
       </div>
 
+      {/* Ask Clarion inline chat */}
+      <motion.div
+        ref={ctaRef}
+        initial="hidden"
+        animate="visible"
+        variants={fadeInVariants}
+        transition={{ delay: 0.4 }}
+        className="max-w-7xl mx-auto px-8 mb-16"
+      >
+        <div className="mb-6">
+          <h2 className="text-2xl text-[var(--foreground)] mb-2">Ask Clarion</h2>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Have questions about these findings? Ask Clarion for guidance.
+          </p>
+        </div>
+        <InlineChat context="results" auditContext={{ request, report }} shared={sharedChat} />
+      </motion.div>
+
       <Footer />
 
-      <FloatingChat context="results" auditContext={{ request, report }} />
+      <FloatingChat
+        context="results"
+        auditContext={{ request, report }}
+        hidden={ctaVisible}
+        shared={sharedChat}
+      />
     </div>
   );
 }
@@ -488,11 +630,11 @@ function RiskBadge({ severity, large = false }: { severity: Severity; large?: bo
 
   return (
     <div
-      className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-md border ${styles.bg} ${styles.text} ${styles.border} ${
-        large ? 'text-base' : 'text-xs'
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border ${styles.bg} ${styles.text} ${styles.border} ${
+        large ? 'text-sm' : 'text-xs'
       }`}
     >
-      <Icon className={large ? 'w-5 h-5' : 'w-3.5 h-3.5'} />
+      <Icon className={large ? 'w-4 h-4' : 'w-3 h-3'} />
       <span className="font-semibold uppercase tracking-wide">{severity}</span>
     </div>
   );
@@ -527,34 +669,45 @@ function FindingItem({
   const getLeakageIcon = () => {
     if (finding.leakageType === 'temporal') return Clock;
     if (finding.leakageType === 'feature') return Network;
-    return Shield;
+    return Layers;
   };
 
   const Icon = getLeakageIcon();
 
   return (
-    <div className="px-8 py-6 hover:bg-[var(--secondary)] transition-colors">
+    <motion.div
+      className="px-8 py-5 transition-colors cursor-pointer"
+      whileHover={{
+        backgroundColor: 'rgba(255,255,255,0.28)',
+        y: -1,
+        boxShadow: '0 4px 16px rgba(167,191,251,0.18)',
+        transition: { duration: 0.18, ease: 'easeOut' },
+      }}
+    >
       <div onClick={onToggle} className="flex items-start justify-between cursor-pointer group">
         <div className="flex items-start gap-5 flex-1">
-          <div className="w-10 h-10 rounded-lg bg-[var(--secondary)] flex items-center justify-center flex-shrink-0 border border-[var(--border)] group-hover:border-[var(--accent-primary)] transition-colors">
-            <Icon className="w-5 h-5 text-[var(--accent-primary)]" />
-          </div>
+          <motion.div
+            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-[var(--secondary)]"
+            whileHover={{ scale: 1.08, transition: { duration: 0.15 } }}
+          >
+            <Icon className="w-5 h-5 text-[var(--muted-foreground)]" />
+          </motion.div>
           <div className="flex-1 pt-0.5 min-w-0">
             <p className="text-xs text-[var(--muted-foreground)] mb-1">{finding.title}</p>
-            <div className="flex items-center gap-3 mb-2 flex-wrap">
-              <code className="text-base text-[var(--foreground)] font-mono font-medium break-all">
-                {finding.feature}
-              </code>
+            <code className="text-sm text-[var(--foreground)] font-mono font-medium break-all block mb-2">
+              {finding.feature}
+            </code>
+            <div className="flex items-center gap-2 flex-wrap">
               <RiskBadge severity={finding.severity} />
+              <span className="text-xs text-[var(--muted-foreground)]">
+                {finding.leakageType === 'feature' ? 'Feature Leakage' : finding.leakageType === 'temporal' ? 'Temporal Leakage' : 'Pipeline Leakage'}
+              </span>
               {finding.humanReviewRequired && (
-                <span className="text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-medium">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-medium">
                   Human review required
                 </span>
               )}
             </div>
-            <p className="text-sm text-[var(--muted-foreground)] capitalize">
-              {finding.leakageType} leakage
-            </p>
           </div>
         </div>
         <button
@@ -571,7 +724,8 @@ function FindingItem({
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
           exit={{ opacity: 0, height: 0 }}
-          className="mt-6 ml-[60px] space-y-5 border-l-2 border-[var(--border)] pl-6"
+          onClick={(e) => e.stopPropagation()}
+          className="mt-6 ml-[60px] space-y-5 border-l border-[var(--border)]/50 pl-6"
         >
           <div>
             <h4 className="text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-3 font-medium">
@@ -597,7 +751,7 @@ function FindingItem({
           </div>
         </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -619,7 +773,7 @@ function SeverityFilterBar({
   onChange: (value: 'all' | Severity) => void;
 }) {
   return (
-    <div className="flex items-center gap-2 mb-4 p-1 bg-[var(--secondary)] rounded-xl border border-[var(--border)] w-fit">
+    <div className="flex items-center gap-1 mb-2 p-0.5 bg-white/55 backdrop-blur-sm rounded-lg border border-[var(--border)]/50 w-fit">
       {FILTER_OPTIONS.map(({ key, label, dot }) => {
         const count = counts[key] ?? 0;
         if (key !== 'all' && count === 0) return null;
@@ -630,25 +784,60 @@ function SeverityFilterBar({
             key={key}
             type="button"
             onClick={() => onChange(key)}
-            className={`
-              relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
-              ${isActive
-                ? 'bg-white text-[var(--foreground)] shadow-sm border border-[var(--border)]'
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+              isActive
+                ? 'bg-white text-[var(--foreground)] shadow-sm border border-[var(--border)]/60'
                 : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)] border border-transparent'
-              }
-            `}
+            }`}
           >
-            {dot && <span className={`w-2 h-2 rounded-full ${dot} flex-shrink-0`} />}
+            {dot && <span className={`w-1.5 h-1.5 rounded-full ${dot} flex-shrink-0`} />}
             <span>{label}</span>
-            <span
-              className={`
-                min-w-[20px] h-5 flex items-center justify-center rounded-full text-xs font-semibold px-1.5
-                ${isActive
-                  ? 'bg-[var(--primary)] text-white'
-                  : 'bg-[var(--border)] text-[var(--muted-foreground)]'
-                }
-              `}
-            >
+            <span className={`text-xs ${isActive ? 'text-[var(--accent-primary)]' : 'text-[var(--muted-foreground)]'}`}>
+              {count}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const LEAKAGE_FILTER_OPTIONS: Array<{ key: 'all' | LeakageType; label: string; dot?: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'temporal', label: 'Temporal', dot: 'bg-blue-500' },
+  { key: 'feature', label: 'Feature', dot: 'bg-violet-400' },
+  { key: 'pipeline', label: 'Pipeline', dot: 'bg-blue-300' },
+];
+
+function LeakageFilterBar({
+  active,
+  counts,
+  onChange,
+}: {
+  active: 'all' | LeakageType;
+  counts: Record<string, number>;
+  onChange: (value: 'all' | LeakageType) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1 mb-4 p-0.5 bg-white/55 backdrop-blur-sm rounded-lg border border-[var(--border)]/50 w-fit">
+      {LEAKAGE_FILTER_OPTIONS.map(({ key, label, dot }) => {
+        const count = counts[key] ?? 0;
+        if (key !== 'all' && count === 0) return null;
+        const isActive = active === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onChange(key)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+              isActive
+                ? 'bg-white text-[var(--foreground)] shadow-sm border border-[var(--border)]/60'
+                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)] border border-transparent'
+            }`}
+          >
+            {dot && <span className={`w-1.5 h-1.5 rounded-full ${dot} flex-shrink-0`} />}
+            <span>{label}</span>
+            <span className={`text-xs ${isActive ? 'text-[var(--accent-primary)]' : 'text-[var(--muted-foreground)]'}`}>
               {count}
             </span>
           </button>
@@ -723,35 +912,70 @@ function EvidenceRow({ item }: { item: EvidenceCitation }) {
   );
 }
 
+// Splits text on backtick-quoted tokens and snake_case/camelCase identifiers,
+// rendering them as inline <code> elements.
+function inlineCode(text: string): React.ReactNode[] {
+  // Match `backtick` spans first, then bare snake_case or camelCase identifiers
+  const parts = text.split(/(`[^`]+`|\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b|\b[a-z]+[A-Z][a-zA-Z0-9]+\b)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return (
+        <code key={i} className="px-1 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[0.75em]">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    if (/^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(part) || /^[a-z]+[A-Z][a-zA-Z0-9]+$/.test(part)) {
+      return (
+        <code key={i} className="px-1 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[0.75em]">
+          {part}
+        </code>
+      );
+    }
+    return part;
+  });
+}
+
 function ActionItem({
+  index,
   priority,
   action,
   description,
   severity,
 }: {
+  index: number;
   priority: string;
   action: string;
   description: string;
   severity: Severity;
 }) {
-  const getBadgeColor = () => {
-    if (severity === 'critical') return 'bg-red-50 text-[var(--risk-critical)] border-red-200';
-    if (severity === 'high') return 'bg-orange-50 text-[var(--risk-high)] border-orange-200';
-    if (severity === 'medium') return 'bg-amber-50 text-[var(--risk-medium)] border-amber-200';
-    return 'bg-lime-50 text-[var(--risk-low)] border-lime-200';
-  };
+  const indexColor = severity === 'critical' ? 'text-red-400'
+    : severity === 'high' ? 'text-orange-400'
+    : severity === 'medium' ? 'text-amber-400'
+    : 'text-lime-500';
 
   return (
-    <div className="flex items-start gap-4">
-      <div
-        className={`px-3 py-1 rounded-md border text-xs font-semibold uppercase tracking-wide ${getBadgeColor()} flex-shrink-0 mt-0.5`}
-      >
-        {priority}
-      </div>
+    <motion.div
+      className="group flex items-start gap-5 px-8 py-5"
+      whileHover={{
+        backgroundColor: 'rgba(255,255,255,0.28)',
+        y: -1,
+        boxShadow: '0 4px 16px rgba(167,191,251,0.18)',
+        transition: { duration: 0.18, ease: 'easeOut' },
+      }}
+    >
+      <span className={`text-lg font-serif font-semibold ${indexColor} flex-shrink-0 w-5 text-center leading-tight mt-0.5`}>
+        {String(index).padStart(2, '0')}
+      </span>
       <div className="flex-1 min-w-0">
-        <h4 className="text-base text-[var(--foreground)] font-medium mb-2">{action}</h4>
-        <p className="text-sm text-[var(--muted-foreground)] leading-relaxed">{description}</p>
+        <div className="flex items-center gap-2 mb-1.5">
+          <h4 className="text-sm font-medium text-[var(--foreground)]">{inlineCode(action)}</h4>
+          <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+            <RiskBadge severity={severity} />
+          </span>
+        </div>
+        <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">{inlineCode(description)}</p>
       </div>
-    </div>
+    </motion.div>
   );
 }

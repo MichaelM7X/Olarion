@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
 import { Link } from 'react-router';
-import { Shield, Clock, Network, ArrowRight, CheckCircle } from 'lucide-react';
+import { Clock, Network, Layers, ArrowRight, CheckCircle } from 'lucide-react';
 import { AmbientBackground } from '../components/AmbientBackground';
 import { FloatingChat } from '../components/FloatingChat';
 import { Navigation } from '../components/Navigation';
@@ -24,7 +24,7 @@ export function Landing() {
       description: 'Identifies features that are proxies for the target or contain leaked information.',
     },
     {
-      icon: Shield,
+      icon: Layers,
       title: 'Structure / Pipeline Leakage',
       description: 'Audits data splits, transformations, and pipeline design for methodological flaws.',
     },
@@ -68,9 +68,14 @@ export function Landing() {
         className="max-w-5xl mx-auto px-8 pt-32 pb-16 relative z-10"
       >
         <motion.div variants={fadeUpVariants} className="text-center mb-4">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--accent-primary-pale)] border border-[var(--border)] text-[var(--accent-primary)] mb-6">
-            <Shield className="w-4 h-4" />
-            <span className="text-sm font-medium">Methodological Trust Layer</span>
+          <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-full bg-[var(--accent-primary-pale)] border border-[var(--border)] text-[var(--accent-primary)] mb-6">
+            <motion.span
+              className="inline-block w-2.5 h-2.5 rounded-full shadow-[0_0_4px_rgba(167,191,251,0.6)]"
+              style={{ background: 'radial-gradient(circle, #A7BFFB 30%, #BFDBFE 70%, #D4E8FF 100%)' }}
+              animate={{ opacity: [1, 0.5, 1] }}
+              transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            <span className="text-sm font-medium">Leakage Detection Active</span>
           </div>
         </motion.div>
 
@@ -78,23 +83,24 @@ export function Landing() {
           variants={fadeUpVariants}
           className="font-serif text-6xl text-center mb-6 text-[var(--foreground)]"
         >
-          LeakGuard
+          Clarion
         </motion.h1>
 
         <motion.p
           variants={fadeUpVariants}
-          className="text-xl text-center mb-4 text-[var(--foreground)] max-w-3xl mx-auto"
+          className="text-3xl text-center mb-4 text-[var(--foreground)] max-w-3xl mx-auto"
         >
-          Audit whether your predictive model is using information it should never have seen
+          Make model trust visible before deployment
         </motion.p>
 
         <motion.p
           variants={fadeUpVariants}
           className="text-base text-center mb-12 text-[var(--muted-foreground)] max-w-2xl mx-auto"
         >
-          A domain-aware leakage audit agent that detects temporal, feature, and structural leakage 
-          before you trust results or deploy your model. Built for high-stakes environments where 
-          methodological integrity matters.
+          A domain-aware leakage audit agent that detects temporal, feature, and structural leakage
+          before you trust results or deploy your model.
+          <br />
+          Built for high-stakes environments where methodological integrity matters.
         </motion.p>
 
         <motion.div
@@ -139,10 +145,15 @@ export function Landing() {
             <motion.div
               key={index}
               variants={fadeUpVariants}
-              className="bg-white/60 backdrop-blur-sm p-6 rounded-lg border border-[var(--border)] hover:border-[var(--accent-primary)] hover:bg-white/80 transition-all"
+              whileHover={{ y: -4, boxShadow: '0 8px 30px rgba(167, 191, 251, 0.2)' }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+              className="bg-white/60 backdrop-blur-sm p-6 rounded-xl border border-[var(--border)] hover:border-[var(--accent-primary)]/30 hover:bg-white/90 transition-colors duration-300 cursor-default"
             >
-              <div className="w-12 h-12 rounded-lg bg-white flex items-center justify-center mb-4 border border-[var(--border)]">
-                <audit.icon className="w-6 h-6 text-[var(--accent-primary)]" />
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
+                style={{ background: 'linear-gradient(135deg, #E8F2FF 0%, #BFDBFE 50%, #A7BFFB 100%)' }}
+              >
+                <audit.icon className="w-6 h-6 text-white" />
               </div>
               <h3 className="text-lg mb-2 text-[var(--foreground)]">{audit.title}</h3>
               <p className="text-sm text-[var(--muted-foreground)] leading-relaxed">{audit.description}</p>
@@ -177,7 +188,15 @@ export function Landing() {
             >
               {/* Step Number */}
               <div className="mb-4">
-                <span className="text-5xl font-serif text-[var(--accent-primary)] opacity-20">
+                <span
+                  className="text-5xl font-serif"
+                  style={{
+                    background: 'linear-gradient(135deg, #A7BFFB 0%, #BFDBFE 50%, #D4E8FF 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                  }}
+                >
                   {step.number}
                 </span>
               </div>
