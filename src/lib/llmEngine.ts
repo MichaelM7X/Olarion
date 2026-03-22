@@ -9,12 +9,18 @@ export async function auditWithLLM(
     body: JSON.stringify({ request }),
   });
 
+  const text = await response.text();
+  const payload = text.length > 0 ? (JSON.parse(text) as { report?: AuditReport; error?: string }) : {};
+
   if (!response.ok) {
-    const error = (await response.json()) as { error?: string };
-    throw new Error(error.error ?? `Audit request failed: ${response.status}`);
+    throw new Error(payload.error ?? `Audit request failed: ${response.status}`);
   }
 
-  const { report } = (await response.json()) as { report: AuditReport };
+  const { report } = payload;
+  if (!report) {
+    throw new Error("Audit response did not include a report.");
+  }
+
   return report;
 }
 
@@ -30,11 +36,17 @@ export async function chatWithLLM(
     body: JSON.stringify({ question, report, request, history }),
   });
 
+  const text = await response.text();
+  const payload = text.length > 0 ? (JSON.parse(text) as { answer?: string; error?: string }) : {};
+
   if (!response.ok) {
-    const error = (await response.json()) as { error?: string };
-    throw new Error(error.error ?? `Chat request failed: ${response.status}`);
+    throw new Error(payload.error ?? `Chat request failed: ${response.status}`);
   }
 
-  const { answer } = (await response.json()) as { answer: string };
+  const { answer } = payload;
+  if (!answer) {
+    throw new Error("Chat response did not include an answer.");
+  }
+
   return answer;
 }

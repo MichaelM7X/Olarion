@@ -1,6 +1,11 @@
 import OpenAI from "openai";
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// SDK v6 throws if apiKey is absent; use a placeholder so the server can boot
+// without .env (audit/chat calls will fail until OPENAI_API_KEY is set).
+const apiKey =
+  process.env.OPENAI_API_KEY?.trim() || "sk-missing-openai-api-key";
+
+const client = new OpenAI({ apiKey });
 
 export { client };
 
