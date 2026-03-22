@@ -20,7 +20,7 @@ export const demoCases: DemoCase[] = [
     domain: "Housing",
     title: "NYC rental prediction",
     story:
-      "We are New York students trying to predict listing rent and whether an apartment will be leased within 7 days. The flashy model looks amazing offline, but Clarion checks whether the model is learning pricing signals or quietly cheating with future information and repeated-building shortcuts.",
+      "We are New York students trying to predict listing rent and whether an apartment will be leased within 7 days. The flashy model looks amazing offline, but Olarion checks whether the model is learning pricing signals or quietly cheating with future information and repeated-building shortcuts.",
     narrator_line:
       "This is the main 2-minute walkthrough: a relatable housing dataset where time leakage, proxy leakage, and structure leakage all show up naturally.",
     default_inputs: {
@@ -78,7 +78,7 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
     domain: "Healthcare",
     title: "Sepsis early-warning audit",
     story:
-      "This case is a credibility anchor for high-stakes auditing. Clarion inspects a synthetic sepsis early-warning setup inspired by a real clinical validation story and flags where a model may be relying on operational responses or full-stay summaries instead of pre-deterioration signals.",
+      "This case is a credibility anchor for high-stakes auditing. Olarion inspects a synthetic sepsis early-warning setup inspired by a real clinical validation story and flags where a model may be relying on operational responses or full-stay summaries instead of pre-deterioration signals.",
     narrator_line:
       "Use this as a quick-switch credibility case: it shows why methodological trust matters when the domain is clinical and mistakes are expensive.",
     source_label:
@@ -136,7 +136,7 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
     domain: "Finance",
     title: "Credit default / loan risk audit",
     story:
-      "Clarion checks whether a credit-risk model is truly predicting future default or quietly smuggling in post-origination repayment behavior and repeated-borrower shortcuts. It gives a strong third case to prove that the same audit logic transfers across domains.",
+      "Olarion checks whether a credit-risk model is truly predicting future default or quietly smuggling in post-origination repayment behavior and repeated-borrower shortcuts. It gives a strong third case to prove that the same audit logic transfers across domains.",
     narrator_line:
       "This finance case rounds out the cross-domain story with a regulated workflow that maps cleanly to the same three judge-friendly buckets.",
     default_inputs: {
@@ -195,7 +195,7 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
     domain: "E-commerce",
     title: "⚠️ Bad Case: Customer return prediction",
     story:
-      "An e-commerce team built a model to predict whether a customer will return a product within 7 days of purchase. The model scored 97% AUC in offline testing and completely collapsed in production. Clarion reveals why: the preprocessing code leaks the answer through three separate channels simultaneously.",
+      "An e-commerce team built a model to predict whether a customer will return a product within 7 days of purchase. The model scored 97% AUC in offline testing and completely collapsed in production. Olarion reveals why: the preprocessing code leaks the answer through three separate channels simultaneously.",
     narrator_line:
       "This is the deliberately broken showcase case — all three leakage types fire at once. Perfect for demonstrating why 97% offline AUC should raise suspicion, not confidence.",
     default_inputs: {

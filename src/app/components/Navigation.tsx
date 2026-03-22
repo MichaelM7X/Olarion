@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router';
-import { ClarionLogo } from './ClarionLogo';
+import { OlarionLogo } from './OlarionLogo';
 
 export function Navigation() {
   const location = useLocation();
@@ -14,8 +14,8 @@ export function Navigation() {
         <div className="flex items-center justify-between">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-3 group">
-            <ClarionLogo size={48} />
-            <span className="font-serif text-xl text-[var(--foreground)]">Clarion</span>
+            <OlarionLogo size={48} />
+            <span className="font-serif text-xl text-[var(--foreground)]">Olarion</span>
           </Link>
 
           {/* Navigation Links */}

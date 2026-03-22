@@ -11,7 +11,7 @@ function severityRank(s: Severity): number {
 function buildMarkdown(report: AuditReport): string {
   const lines: string[] = [];
 
-  lines.push("# Clarion Audit Report");
+  lines.push("# Olarion Audit Report");
   lines.push("");
   lines.push(`**Overall Risk:** ${report.overall_risk.toUpperCase()}`);
   const critical = report.findings.filter((f) => f.severity === "critical").length;
@@ -130,7 +130,7 @@ function buildPdf(report: AuditReport): ArrayBuffer {
     y += mm;
   }
 
-  addTitle("Clarion Audit Report", 20);
+  addTitle("Olarion Audit Report", 20);
   addGap(4);
 
   const critical = report.findings.filter((f) => f.severity === "critical").length;
@@ -217,7 +217,7 @@ export async function downloadAuditZip(report: AuditReport): Promise<void> {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `clarion-report-${new Date().toISOString().slice(0, 10)}.zip`;
+  a.download = `olarion-report-${new Date().toISOString().slice(0, 10)}.zip`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

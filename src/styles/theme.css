@@ -26,7 +26,7 @@
   --font-weight-normal: 400;
   --ring: #94a3b8;
   
-  /* Clarion enterprise colors - cool, neutral palette */
+  /* Olarion enterprise colors - cool, neutral palette */
   --accent-primary: #475569;
   --accent-primary-light: #64748b;
   --accent-primary-pale: #f1f5f9;
@@ -119,7 +119,7 @@
   --color-switch-background: var(--switch-background);
   --color-ring: var(--ring);
   
-  /* Clarion enterprise colors */
+  /* Olarion enterprise colors */
   --color-accent-primary: var(--accent-primary);
   --color-accent-primary-light: var(--accent-primary-light);
   --color-accent-primary-pale: var(--accent-primary-pale);

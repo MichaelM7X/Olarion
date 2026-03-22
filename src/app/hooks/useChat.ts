@@ -97,7 +97,7 @@ function getMockResponse(message: string, context: string): string {
     if (lowerMsg.includes('feature leakage') || lowerMsg.includes('what counts'))
       return "Feature leakage occurs when a feature contains information derived from the target variable or future events. This can happen through direct calculation, proxy variables, or data collection artifacts that wouldn't be available at true prediction time.";
     if (lowerMsg.includes('temporal'))
-      return "Temporal leakage happens when your model uses information from the future—data that wouldn't be available at the time you need to make a prediction. Clarion analyzes timestamps and data collection patterns to detect this.";
+      return "Temporal leakage happens when your model uses information from the future—data that wouldn't be available at the time you need to make a prediction. Olarion analyzes timestamps and data collection patterns to detect this.";
     if (lowerMsg.includes('when'))
       return "Run an audit before trusting model results, before deployment, when validating external models, or periodically for production systems. It's especially important for high-stakes decisions in healthcare, finance, or compliance contexts.";
   }

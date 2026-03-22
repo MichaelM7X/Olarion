@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { Send, X, Minimize2, Sparkles, Bot } from 'lucide-react';
-import { ClarionLogo } from './ClarionLogo';
+import { OlarionLogo } from './OlarionLogo';
 import { useEffect, useRef, useState } from 'react';
 import type { AuditReport, AuditRequest } from '../../types';
 import { useChat } from '../hooks/useChat';
@@ -58,7 +58,7 @@ export function FloatingChat({ context, auditContext, hidden = false, shared }: 
               className="absolute right-full mr-3 top-1/2 -translate-y-1/2 whitespace-nowrap"
             >
               <div className="px-3 py-2 rounded-lg bg-[var(--primary)] text-white text-sm shadow-lg">
-                Ask Clarion
+                Ask Olarion
               </div>
             </motion.div>
           )}
@@ -133,7 +133,7 @@ export function FloatingChat({ context, auditContext, hidden = false, shared }: 
                 >
                   <Sparkles className="w-3.5 h-3.5 text-white" />
                 </div>
-                <h3 className="text-sm font-medium text-[var(--foreground)]">Ask Clarion</h3>
+                <h3 className="text-sm font-medium text-[var(--foreground)]">Ask Olarion</h3>
               </div>
               <button
                 onClick={() => setIsOpen(false)}
@@ -259,7 +259,7 @@ function renderMarkdown(text: string) {
 }
 
 function getContextPrompt(context: string): string {
-  if (context === 'results') return 'Ask Clarion about your findings, evidence, or what to fix first.';
-  if (context === 'setup') return 'Ask Clarion about audit setup and configuration.';
-  return 'Ask Clarion anything about model auditing.';
+  if (context === 'results') return 'Ask Olarion about your findings, evidence, or what to fix first.';
+  if (context === 'setup') return 'Ask Olarion about audit setup and configuration.';
+  return 'Ask Olarion anything about model auditing.';
 }

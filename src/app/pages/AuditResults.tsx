@@ -307,9 +307,9 @@ export function AuditResults() {
         <div className="h-20" />
         <div className="flex flex-col items-center justify-center py-20 px-8 relative z-10">
           <div className="text-center mb-8">
-            <h2 className="text-2xl text-[var(--foreground)] font-medium mb-2">Running Clarion Audit</h2>
+            <h2 className="text-2xl text-[var(--foreground)] font-medium mb-2">Running Olarion Audit</h2>
             <p className="text-sm text-[var(--muted-foreground)] max-w-md">
-              Clarion is analyzing your task, columns, and code for data leakage patterns.
+              Olarion is analyzing your task, columns, and code for data leakage patterns.
             </p>
           </div>
           <AuditThinking steps={thinkingSteps} />
@@ -655,7 +655,7 @@ export function AuditResults() {
         </motion.div>
       </div>
 
-      {/* Ask Clarion inline chat */}
+      {/* Ask Olarion inline chat */}
       <motion.div
         ref={ctaRef}
         initial="hidden"
@@ -665,9 +665,9 @@ export function AuditResults() {
         className="max-w-7xl mx-auto px-8 mb-16"
       >
         <div className="mb-6">
-          <h2 className="text-2xl text-[var(--foreground)] mb-2">Ask Clarion</h2>
+          <h2 className="text-2xl text-[var(--foreground)] mb-2">Ask Olarion</h2>
           <p className="text-sm text-[var(--muted-foreground)]">
-            Have questions about these findings? Ask Clarion for guidance.
+            Have questions about these findings? Ask Olarion for guidance.
           </p>
         </div>
         <InlineChat context="results" auditContext={{ request, report }} shared={sharedChat} />

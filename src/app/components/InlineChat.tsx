@@ -56,7 +56,7 @@ export function InlineChat({ context, auditContext, shared }: InlineChatProps) {
         >
           <Sparkles className="w-3.5 h-3.5 text-white" />
         </div>
-        <h3 className="text-sm font-medium text-[var(--foreground)]">Ask Clarion</h3>
+        <h3 className="text-sm font-medium text-[var(--foreground)]">Ask Olarion</h3>
       </div>
 
       {/* Unified body — prompts live in the same space as conversation */}

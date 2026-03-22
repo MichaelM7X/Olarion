@@ -1,4 +1,4 @@
-import { ClarionLogo } from './ClarionLogo';
+import { OlarionLogo } from './OlarionLogo';
 
 export function Footer() {
   return (
@@ -8,11 +8,11 @@ export function Footer() {
           {/* Logo and Copyright */}
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-3">
-              <ClarionLogo size={40} />
-              <span className="font-serif text-lg text-[var(--foreground)]">Clarion</span>
+              <OlarionLogo size={40} />
+              <span className="font-serif text-lg text-[var(--foreground)]">Olarion</span>
             </div>
             <p className="text-sm text-[var(--muted-foreground)]">
-              © 2026 Clarion. All rights reserved.
+              © 2026 Olarion. All rights reserved.
             </p>
           </div>
 

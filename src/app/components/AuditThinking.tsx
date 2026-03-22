@@ -13,15 +13,15 @@ import {
   FileText,
 } from 'lucide-react';
 import type { ThinkingStep } from '../../lib/llmEngine';
-import { ClarionLogo } from './ClarionLogo';
+import { OlarionLogo } from './OlarionLogo';
 
-const ClarionIconSmall = ({ className }: { className?: string }) => (
-  <ClarionLogo size={16} animate={false} className={className} />
+const OlarionIconSmall = ({ className }: { className?: string }) => (
+  <OlarionLogo size={16} animate={false} className={className} />
 );
 
 const STEP_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   'pipeline-scan': Search,
-  'proxy-detector': ClarionIconSmall,
+  'proxy-detector': OlarionIconSmall,
   'temporal-detector': FileSearch,
   'code-auditor': Code,
   'model-auditor': Code,
@@ -123,7 +123,7 @@ function ThinkingOrb({ active }: { active: boolean }) {
         transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
       />
       <div className="relative z-10 flex items-center justify-center">
-        <ClarionLogo size={28} animate={false} />
+        <OlarionLogo size={28} animate={false} />
       </div>
     </div>
   );
@@ -205,7 +205,7 @@ export function AuditThinking({ steps }: { steps: ThinkingStep[] }) {
               <div className="min-w-0 text-left">
                 <div className="mb-1 flex items-center gap-2">
                   <p className="text-sm font-medium text-[var(--foreground)] sm:text-base">
-                    {activeCount > 0 ? 'Clarion is auditing…' : 'Processing complete'}
+                    {activeCount > 0 ? 'Olarion is auditing…' : 'Processing complete'}
                   </p>
                   {activeCount > 0 && (
                     <span className="inline-flex items-center rounded-full border border-sky-200/80 bg-white/70 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 backdrop-blur-sm">

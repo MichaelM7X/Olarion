@@ -10,8 +10,8 @@ export interface AuditRecord {
   report: AuditReport;
 }
 
-const AUDIT_HISTORY_KEY = "clarion.audit-history";
-const CURRENT_AUDIT_KEY = "clarion.current-audit";
+const AUDIT_HISTORY_KEY = "olarion.audit-history";
+const CURRENT_AUDIT_KEY = "olarion.current-audit";
 
 function isBrowser() {
   return typeof window !== "undefined";

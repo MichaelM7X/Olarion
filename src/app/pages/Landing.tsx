@@ -83,7 +83,7 @@ export function Landing() {
           variants={fadeUpVariants}
           className="font-serif text-6xl text-center mb-6 text-[var(--foreground)]"
         >
-          Clarion
+          Olarion
         </motion.h1>
 
         <motion.p
