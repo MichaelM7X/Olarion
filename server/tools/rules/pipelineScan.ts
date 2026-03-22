@@ -1,5 +1,4 @@
-import { AuditRequest, AuditFinding } from "../../../src/types";
-import { codeEvidence, csvEvidence } from "../../utils";
+import { AuditRequest, AuditFinding, EvidenceItem } from "../../../src/types";
 
 export function pipelineScan(request: AuditRequest): AuditFinding[] {
   const findings: AuditFinding[] = [];
@@ -27,6 +26,16 @@ export function pipelineScan(request: AuditRequest): AuditFinding[] {
         col.toLowerCase().endsWith("_key") ||
         col.toLowerCase() === "id",
     );
+    const entityEvidence: EvidenceItem[] = [
+      {
+        claim: "Preprocessing code uses train_test_split without group-based splitting.",
+        source: { filename: "preprocessing_code.py", location: "train_test_split call" },
+      },
+      {
+        claim: `Likely entity ID columns detected: ${idCols.join(", ")}.`,
+        source: { filename: "dataset.csv", location: `columns: ${idCols.join(", ")}` },
+      },
+    ];
     findings.push({
       id: "pipeline-random-split-entity",
       title: "Random split may leak repeated entities",
@@ -35,18 +44,7 @@ export function pipelineScan(request: AuditRequest): AuditFinding[] {
       severity: "high",
       confidence: "medium",
       flagged_object: idCols.join(", "),
-      evidence: [
-        codeEvidence(
-          "Preprocessing code uses train_test_split without group-based splitting.",
-          "preprocessing_code",
-          request.preprocessing_code,
-          "train_test_split",
-        ),
-        csvEvidence(
-          `Likely entity ID columns detected: ${idCols.join(", ")}.`,
-          idCols,
-        ),
-      ],
+      evidence: entityEvidence,
       why_it_matters:
         "Model may memorize entity identity instead of learning the task.",
       fix_recommendation: ["Use GroupKFold split keyed by entity ID."],
@@ -78,6 +76,16 @@ export function pipelineScan(request: AuditRequest): AuditFinding[] {
     );
 
     if (fitIndex >= 0 && hasSplit && fitIndex < splitIndex) {
+      const globalEvidence: EvidenceItem[] = [
+        {
+          claim: `Code contains ${label} before the train/test split.`,
+          source: { filename: "preprocessing_code.py", location: pattern },
+        },
+        {
+          claim: "Preprocessing fitted before split leaks test distribution into training.",
+          source: { filename: "preprocessing_code.py", location: "fit/fit_transform before split call" },
+        },
+      ];
       findings.push({
         id: "pipeline-global-preprocessing",
         title: "Global preprocessing may mix future information",
@@ -86,25 +94,10 @@ export function pipelineScan(request: AuditRequest): AuditFinding[] {
         severity: "medium",
         confidence: "medium",
         flagged_object: "pipeline preprocessing",
-        evidence: [
-          codeEvidence(
-            `Code contains ${label} before the train/test split.`,
-            "preprocessing_code",
-            request.preprocessing_code,
-            pattern,
-          ),
-          codeEvidence(
-            "Preprocessing fitted before split leaks test distribution into training.",
-            "preprocessing_code",
-            request.preprocessing_code,
-            "train_test_split",
-          ),
-        ],
+        evidence: globalEvidence,
         why_it_matters:
           "Even clean features become tainted if preprocessing sees test data.",
-        fix_recommendation: [
-          "Fit preprocessing inside each training fold only.",
-        ],
+        fix_recommendation: ["Fit preprocessing inside each training fold only."],
         needs_human_review: false,
       });
       break;

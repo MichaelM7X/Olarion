@@ -1,6 +1,5 @@
-import { AuditRequest, AuditFinding } from "../../../src/types";
+import { AuditRequest, AuditFinding, EvidenceItem } from "../../../src/types";
 import { callOpenAIJson } from "../../openaiClient";
-import { codeEvidence } from "../../utils";
 
 export interface CodeAuditResult {
   split_method: string | null;
@@ -48,7 +47,16 @@ Respond in this exact JSON format:
       "description": "what the issue is",
       "code_reference": "the relevant line or pattern",
       "leakage_type": "structural" or "temporal" or "preprocessing",
-      "severity": "critical" or "high" or "medium" or "low"
+      "severity": "critical" or "high" or "medium" or "low",
+      "evidence": [
+        {
+          "claim": "one concrete factual observation supporting your reasoning",
+          "source": {
+            "filename": "preprocessing_code.py",
+            "location": "specific line or pattern (e.g. line 42, fit_transform call)"
+          }
+        }
+      ]
     }
   ]
 }`;
@@ -63,37 +71,34 @@ Respond in this exact JSON format:
   };
 
   const findings: AuditFinding[] = issues.map((issue, i) => {
-    const codeRef = String(issue.code_reference || "");
-    const desc = String(issue.description || "Code issue detected");
+    const rawEvidence = (issue.evidence as Array<Record<string, unknown>>) ?? [];
+    const evidence: EvidenceItem[] = rawEvidence.length > 0
+      ? rawEvidence.map((e) => ({
+          claim: String((e.claim as string) ?? issue.description ?? "Issue detected"),
+          source: {
+            filename: String(((e.source as Record<string, unknown>)?.filename) ?? "preprocessing_code.py"),
+            location: String(((e.source as Record<string, unknown>)?.location) ?? issue.code_reference ?? "N/A"),
+          },
+        }))
+      : [
+          {
+            claim: `Code analysis found: ${issue.description}`,
+            source: { filename: "preprocessing_code.py", location: String(issue.code_reference ?? "N/A") },
+          },
+        ];
+
     return {
       id: `code-audit-${i}`,
-      title: desc,
+      title: String(issue.description ?? "Code issue detected"),
       macro_bucket: (bucketMap[String(issue.leakage_type ?? "")] ??
         "Structure / pipeline leakage") as AuditFinding["macro_bucket"],
       fine_grained_type: "evaluation" as AuditFinding["fine_grained_type"],
       severity: String(issue.severity ?? "medium") as AuditFinding["severity"],
       confidence: "high" as AuditFinding["confidence"],
-      flagged_object: codeRef || "preprocessing code",
-      evidence: [
-        codeEvidence(
-          `Code analysis found: ${desc}`,
-          "preprocessing_code",
-          request.preprocessing_code,
-          codeRef || desc,
-        ),
-        ...(codeRef
-          ? [codeEvidence(
-              `Relevant code: ${codeRef}`,
-              "preprocessing_code",
-              request.preprocessing_code,
-              codeRef,
-            )]
-          : []),
-      ],
+      flagged_object: String(issue.code_reference ?? "preprocessing code"),
+      evidence,
       why_it_matters: "Code-level leakage is concrete and verifiable.",
-      fix_recommendation: [
-        "Fix the identified issue in your preprocessing pipeline.",
-      ],
+      fix_recommendation: ["Fix the identified issue in your preprocessing pipeline."],
       needs_human_review: false,
     };
   });

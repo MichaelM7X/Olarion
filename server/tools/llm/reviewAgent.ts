@@ -1,4 +1,4 @@
-import { AuditRequest, AuditFinding } from "../../../src/types";
+import { AuditRequest, AuditFinding, EvidenceItem } from "../../../src/types";
 import { client, callOpenAIJson } from "../../openaiClient";
 import type {
   ChatCompletionTool,
@@ -133,20 +133,47 @@ Respond in JSON:
       "leakage_type": "proxy" or "temporal" or "other",
       "is_issue": true or false,
       "reasoning": "explanation",
-      "confidence": "high" or "medium" or "low"
+      "confidence": "high" or "medium" or "low",
+      "evidence": [
+        {
+          "claim": "one concrete factual observation",
+          "source": {
+            "filename": "dataset.csv or preprocessing_code.py",
+            "location": "column name or line reference"
+          }
+        }
+      ]
     }
   ]
 }`,
   );
 
   const findings: AuditFinding[] = [];
-  for (const item of (result.findings as Array<Record<string, unknown>>) ??
-    []) {
+  for (const item of (result.findings as Array<Record<string, unknown>>) ?? []) {
     if (!item.is_issue) continue;
     const bucket =
-      item.leakage_type === "temporal"
-        ? "Time leakage"
-        : "Feature / proxy leakage";
+      item.leakage_type === "temporal" ? "Time leakage" : "Feature / proxy leakage";
+
+    const rawEvidence = (item.evidence as Array<Record<string, unknown>>) ?? [];
+    const evidence: EvidenceItem[] = rawEvidence.length > 0
+      ? rawEvidence.map((e) => ({
+          claim: String((e.claim as string) ?? item.reasoning ?? "Issue detected"),
+          source: {
+            filename: String(((e.source as Record<string, unknown>)?.filename) ?? "dataset.csv"),
+            location: String(((e.source as Record<string, unknown>)?.location) ?? `column '${featureName}'`),
+          },
+        }))
+      : [
+          {
+            claim: `Review Agent cross-check: ${item.reasoning}`,
+            source: { filename: "dataset.csv", location: `column '${featureName}'` },
+          },
+          {
+            claim: `Triggered because: ${reason}`,
+            source: { filename: "dataset.csv", location: `column '${featureName}'` },
+          },
+        ];
+
     findings.push({
       id: `review-crosscheck-${slugify(featureName)}-${item.leakage_type}`,
       title: `[Review Agent] Cross-check found ${item.leakage_type} issue in ${featureName}`,
@@ -157,20 +184,7 @@ Respond in JSON:
       severity: item.confidence === "high" ? "high" : "medium",
       confidence: String(item.confidence) as AuditFinding["confidence"],
       flagged_object: featureName,
-      evidence: [
-        {
-          text: `Review Agent cross-check: ${String(item.reasoning || "cross-check analysis")}`,
-          source_type: "llm_reasoning" as const,
-          citation_label: "Review Agent analysis",
-          citation_detail: String(item.reasoning || "cross-check analysis"),
-        },
-        {
-          text: `Triggered because: ${reason}`,
-          source_type: "llm_reasoning" as const,
-          citation_label: "Review Agent analysis",
-          citation_detail: `Cross-check trigger reason: ${reason}`,
-        },
-      ],
+      evidence,
       why_it_matters:
         "Cross-check by Review Agent found additional leakage risk not caught in initial scan.",
       fix_recommendation: [
@@ -216,6 +230,18 @@ Respond in JSON:
 
   if (!result.is_still_suspicious) return [];
 
+  const additionalEvidence = (result.additional_evidence as string[]) ?? [];
+  const evidence: EvidenceItem[] = [
+    {
+      claim: `Review Agent deep dive: ${result.refined_reasoning}`,
+      source: { filename: "dataset.csv", location: `column '${featureName}'` },
+    },
+    ...additionalEvidence.map((e) => ({
+      claim: e,
+      source: { filename: "dataset.csv", location: `column '${featureName}'` },
+    })),
+  ];
+
   return [
     {
       id: `review-deepdive-${slugify(featureName)}`,
@@ -223,29 +249,12 @@ Respond in JSON:
       macro_bucket: "Feature / proxy leakage",
       fine_grained_type: "proxy",
       severity: result.refined_confidence === "high" ? "critical" : "high",
-      confidence: String(
-        result.refined_confidence,
-      ) as AuditFinding["confidence"],
+      confidence: String(result.refined_confidence) as AuditFinding["confidence"],
       flagged_object: featureName,
-      evidence: [
-        {
-          text: `Review Agent deep dive: ${String(result.refined_reasoning || "deep-dive analysis")}`,
-          source_type: "llm_reasoning" as const,
-          citation_label: "Review Agent analysis",
-          citation_detail: String(result.refined_reasoning || "deep-dive analysis"),
-        },
-        ...((result.additional_evidence as string[]) ?? []).map((e) => ({
-          text: e,
-          source_type: "llm_reasoning" as const,
-          citation_label: "Review Agent analysis",
-          citation_detail: e,
-        })),
-      ],
+      evidence,
       why_it_matters:
         "Deep-dive analysis by Review Agent provides stronger evidence for this finding.",
-      fix_recommendation: [
-        `Remove ${featureName} — confirmed by deep-dive analysis.`,
-      ],
+      fix_recommendation: [`Remove ${featureName} — confirmed by deep-dive analysis.`],
       needs_human_review: false,
     },
   ];
@@ -278,6 +287,17 @@ Respond in JSON:
 
   if (!result.interaction_creates_leakage) return [];
 
+  const evidence: EvidenceItem[] = [
+    {
+      claim: `Review Agent interaction check: ${result.reasoning}`,
+      source: { filename: "dataset.csv", location: `columns '${featureA}' and '${featureB}'` },
+    },
+    {
+      claim: `Hypothesis: ${hypothesis}`,
+      source: { filename: "dataset.csv", location: `columns '${featureA}' and '${featureB}'` },
+    },
+  ];
+
   return [
     {
       id: `review-interaction-${slugify(featureA)}-${slugify(featureB)}`,
@@ -287,20 +307,7 @@ Respond in JSON:
       severity: result.confidence === "high" ? "high" : "medium",
       confidence: String(result.confidence) as AuditFinding["confidence"],
       flagged_object: `${featureA} × ${featureB}`,
-      evidence: [
-        {
-          text: `Review Agent interaction check: ${String(result.reasoning || "interaction analysis")}`,
-          source_type: "llm_reasoning" as const,
-          citation_label: "Review Agent analysis",
-          citation_detail: String(result.reasoning || "interaction analysis"),
-        },
-        {
-          text: `Hypothesis: ${hypothesis}`,
-          source_type: "llm_reasoning" as const,
-          citation_label: "Review Agent analysis",
-          citation_detail: `Interaction hypothesis: ${hypothesis}`,
-        },
-      ],
+      evidence,
       why_it_matters:
         "Feature interactions can create leakage that single-feature analysis misses.",
       fix_recommendation: [

@@ -1,6 +1,5 @@
-import { AuditRequest, AuditFinding } from "../../../src/types";
+import { AuditRequest, AuditFinding, EvidenceItem } from "../../../src/types";
 import { callOpenAIJson } from "../../openaiClient";
-import { codeEvidence } from "../../utils";
 
 export async function auditModelTrainingCode(
   request: AuditRequest,
@@ -45,7 +44,16 @@ Respond in this exact JSON format:
       "description": "what the issue is",
       "code_reference": "the relevant line or pattern",
       "leakage_type": "feature_selection" or "validation" or "preprocessing" or "other",
-      "severity": "critical" or "high" or "medium" or "low"
+      "severity": "critical" or "high" or "medium" or "low",
+      "evidence": [
+        {
+          "claim": "one concrete factual observation",
+          "source": {
+            "filename": "model_training_code.py",
+            "location": "specific line or pattern (e.g. line 15, SelectKBest call)"
+          }
+        }
+      ]
     }
   ]
 }`;
@@ -53,40 +61,35 @@ Respond in this exact JSON format:
   const result = await callOpenAIJson(systemPrompt, userPrompt);
   const issues = (result.issues as Array<Record<string, unknown>>) ?? [];
 
-  const trainingCode = request.model_training_code!;
   return issues.map((issue, i) => {
-    const codeRef = String(issue.code_reference || "");
-    const desc = String(issue.description || "Training code issue detected");
+    const rawEvidence = (issue.evidence as Array<Record<string, unknown>>) ?? [];
+    const evidence: EvidenceItem[] = rawEvidence.length > 0
+      ? rawEvidence.map((e) => ({
+          claim: String((e.claim as string) ?? issue.description ?? "Issue detected"),
+          source: {
+            filename: String(((e.source as Record<string, unknown>)?.filename) ?? "model_training_code.py"),
+            location: String(((e.source as Record<string, unknown>)?.location) ?? issue.code_reference ?? "N/A"),
+          },
+        }))
+      : [
+          {
+            claim: `Training code analysis found: ${issue.description}`,
+            source: { filename: "model_training_code.py", location: String(issue.code_reference ?? "N/A") },
+          },
+        ];
+
     return {
       id: `model-audit-${i}`,
-      title: desc,
-      macro_bucket:
-        "Structure / pipeline leakage" as AuditFinding["macro_bucket"],
+      title: String(issue.description ?? "Training code issue detected"),
+      macro_bucket: "Structure / pipeline leakage" as AuditFinding["macro_bucket"],
       fine_grained_type: "evaluation" as AuditFinding["fine_grained_type"],
       severity: String(issue.severity ?? "medium") as AuditFinding["severity"],
       confidence: "high" as AuditFinding["confidence"],
-      flagged_object: codeRef || "training code",
-      evidence: [
-        codeEvidence(
-          `Training code analysis found: ${desc}`,
-          "model_training_code",
-          trainingCode,
-          codeRef || desc,
-        ),
-        ...(codeRef
-          ? [codeEvidence(
-              `Relevant code: ${codeRef}`,
-              "model_training_code",
-              trainingCode,
-              codeRef,
-            )]
-          : []),
-      ],
+      flagged_object: String(issue.code_reference ?? "training code"),
+      evidence,
       why_it_matters:
         "Training pipeline leakage can inflate validation metrics and hide real performance.",
-      fix_recommendation: [
-        "Fix the identified issue in your model training pipeline.",
-      ],
+      fix_recommendation: ["Fix the identified issue in your model training pipeline."],
       needs_human_review: false,
     };
   });

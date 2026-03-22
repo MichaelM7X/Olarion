@@ -1,4 +1,4 @@
-import { AuditRequest, AuditFinding } from "../../../src/types";
+import { AuditRequest, AuditFinding, EvidenceItem } from "../../../src/types";
 import { callOpenAIJson } from "../../openaiClient";
 
 export async function detectTemporalLeakage(
@@ -38,7 +38,16 @@ Respond in this exact JSON format:
       "feature_name": "...",
       "has_temporal_leakage": true or false,
       "reasoning": "one sentence explanation",
-      "confidence": "high" or "medium" or "low"
+      "confidence": "high" or "medium" or "low",
+      "evidence": [
+        {
+          "claim": "one concrete factual observation",
+          "source": {
+            "filename": "dataset.csv",
+            "location": "column name or relevant code location (e.g. column 'feature_name', or preprocessing_code.py line 23)"
+          }
+        }
+      ]
     }
   ]
 }`;
@@ -52,8 +61,22 @@ Respond in this exact JSON format:
 
     const conf = String(item.confidence ?? "medium");
 
-    const reasoning = String(item.reasoning || "LLM detected temporal leakage risk.");
+    const rawEvidence = (item.evidence as Array<Record<string, unknown>>) ?? [];
     const featureName = String(item.feature_name ?? "unknown");
+    const evidence: EvidenceItem[] = rawEvidence.length > 0
+      ? rawEvidence.map((e) => ({
+          claim: String((e.claim as string) ?? item.reasoning ?? "Temporal leakage risk detected"),
+          source: {
+            filename: String(((e.source as Record<string, unknown>)?.filename) ?? "dataset.csv"),
+            location: String(((e.source as Record<string, unknown>)?.location) ?? `column '${item.feature_name}'`),
+          },
+        }))
+      : [
+          {
+            claim: String(item.reasoning ?? "LLM detected temporal leakage risk."),
+            source: { filename: "dataset.csv", location: `column '${item.feature_name}'` },
+          },
+        ];
 
     findings.push({
       id: `temporal-${featureName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
@@ -63,14 +86,7 @@ Respond in this exact JSON format:
       severity: conf === "high" ? "high" : "medium",
       confidence: conf as AuditFinding["confidence"],
       flagged_object: featureName,
-      evidence: [
-        {
-          text: reasoning,
-          source_type: "llm_reasoning" as const,
-          citation_label: "LLM semantic analysis",
-          citation_detail: reasoning,
-        },
-      ],
+      evidence,
       why_it_matters:
         "Features computed with future data make the model appear accurate but fail in production.",
       fix_recommendation: [

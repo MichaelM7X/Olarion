@@ -47,8 +47,8 @@ function buildMarkdown(report: AuditReport): string {
     lines.push("");
     lines.push("**Evidence:**");
     for (const e of f.evidence) {
-      const label = e.citation_label ? ` [${e.citation_label}]` : "";
-      lines.push(`- ${e.text}${label}`);
+      lines.push(`- ${e.claim}`);
+      lines.push(`  _Source: ${e.source.filename} (${e.source.location})_`);
     }
     lines.push("");
     lines.push("**Recommendation:**");
@@ -157,8 +157,8 @@ function buildPdf(report: AuditReport): ArrayBuffer {
     addGap(1);
     addText(`Why it matters: ${f.why_it_matters}`, 9);
     for (const e of f.evidence) {
-      const label = e.citation_label ? ` [${e.citation_label}]` : "";
-      addText(`  • ${e.text}${label}`, 9);
+      addText(`  • ${e.claim}`, 9);
+      addText(`    Source: ${e.source.filename} (${e.source.location})`, 8);
     }
     addText(`Recommendation: ${f.fix_recommendation.join(" ")}`, 9);
     addGap(2);

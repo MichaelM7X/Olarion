@@ -30,6 +30,14 @@ export interface AuditRequest {
   model_training_code?: string;
 }
 
+export interface EvidenceItem {
+  claim: string;
+  source: {
+    filename: string;
+    location: string;
+  };
+}
+
 export interface AuditFinding {
   id: string;
   title: string;
@@ -38,7 +46,9 @@ export interface AuditFinding {
   severity: Severity;
   confidence: Confidence;
   flagged_object: string;
-  evidence: string[];
+  evidence: EvidenceItem[];
+  rule_cited?: string;
+  escalate_reason?: string | null;
   why_it_matters: string;
   fix_recommendation: string[];
   needs_human_review: boolean;

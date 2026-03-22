@@ -12,8 +12,9 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
-  Loader2,
   Download,
+  FileText,
+  X,
 } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AmbientBackground } from '../components/AmbientBackground';
@@ -22,7 +23,7 @@ import { InlineChat } from '../components/InlineChat';
 import type { SharedChatState, ChatMessage } from '../hooks/useChat';
 import { Navigation } from '../components/Navigation';
 import { Footer } from '../components/Footer';
-import type { AuditFinding, AuditReport, AuditRequest, Severity, EvidenceCitation } from '../../types';
+import type { AuditFinding, AuditReport, AuditRequest, EvidenceItem, Severity } from '../../types';
 import { auditWithStream, type ThinkingStep } from '../../lib/llmEngine';
 import { buildAuditRecord, saveAuditRecord } from '../lib/storage';
 import { downloadAuditZip } from '../lib/exportZip';
@@ -35,9 +36,11 @@ interface UiFinding {
   feature: string;
   leakageType: LeakageType;
   severity: Severity;
-  evidence: EvidenceCitation[];
+  confidence: AuditFinding['confidence'];
+  evidence: EvidenceItem[];
   recommendation: string;
   humanReviewRequired: boolean;
+  escalateReason: string | null;
   title: string;
   whyItMatters: string;
 }
@@ -54,9 +57,11 @@ function mapFinding(f: AuditFinding): UiFinding {
     feature: f.flagged_object,
     leakageType: macroToLeakage(f.macro_bucket),
     severity: f.severity,
-    evidence: f.evidence ?? [],
+    confidence: f.confidence,
+    evidence: f.evidence,
     recommendation: f.fix_recommendation.join(' '),
     humanReviewRequired: f.needs_human_review,
+    escalateReason: f.escalate_reason ?? null,
     title: f.title,
     whyItMatters: f.why_it_matters,
   };
@@ -820,6 +825,55 @@ function StatusMetric({
   );
 }
 
+function ConfidenceBadge({ confidence }: { confidence: AuditFinding['confidence'] }) {
+  const styles =
+    confidence === 'high'
+      ? 'bg-green-50 text-green-700 border-green-200'
+      : confidence === 'medium'
+        ? 'bg-amber-50 text-amber-700 border-amber-200'
+        : 'bg-red-50 text-red-700 border-red-200';
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded border font-medium uppercase tracking-wide ${styles}`}>
+      {confidence}
+    </span>
+  );
+}
+
+function SourceBadge({ filename, location }: { filename: string; location: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--secondary)] border border-[var(--border)] text-xs text-[var(--muted-foreground)] font-mono">
+      <FileText className="w-3 h-3 flex-shrink-0" />
+      <span className="font-medium text-[var(--foreground)]">{filename}</span>
+      <span className="text-[var(--muted-foreground)]">({location})</span>
+    </span>
+  );
+}
+
+function EscalateModal({ reason, onClose }: { reason: string; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl border border-[var(--border)] shadow-xl max-w-md w-full mx-4 p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2 text-blue-700">
+            <AlertCircle className="w-5 h-5" />
+            <h3 className="font-semibold text-base">Human Review Required</h3>
+          </div>
+          <button type="button" onClick={onClose} className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <p className="text-sm text-[var(--foreground)] leading-relaxed">{reason}</p>
+      </div>
+    </div>
+  );
+}
+
 function FindingItem({
   finding,
   expanded,
@@ -829,6 +883,8 @@ function FindingItem({
   expanded: boolean;
   onToggle: () => void;
 }) {
+  const [showEscalate, setShowEscalate] = useState(false);
+
   const getLeakageIcon = () => {
     if (finding.leakageType === 'temporal') return Clock;
     if (finding.leakageType === 'feature') return Network;
@@ -839,7 +895,7 @@ function FindingItem({
 
   return (
     <motion.div
-      className="px-8 py-5 transition-colors cursor-pointer"
+      className="px-8 py-6 transition-colors"
       whileHover={{
         backgroundColor: 'rgba(255,255,255,0.28)',
         y: -1,
@@ -847,6 +903,9 @@ function FindingItem({
         transition: { duration: 0.18, ease: 'easeOut' },
       }}
     >
+      {showEscalate && finding.escalateReason && (
+        <EscalateModal reason={finding.escalateReason} onClose={() => setShowEscalate(false)} />
+      )}
       <div onClick={onToggle} className="flex items-start justify-between cursor-pointer group">
         <div className="flex items-start gap-5 flex-1">
           <motion.div
@@ -862,13 +921,18 @@ function FindingItem({
             </code>
             <div className="flex items-center gap-2 flex-wrap">
               <RiskBadge severity={finding.severity} />
-              <span className="text-xs text-[var(--muted-foreground)]">
-                {finding.leakageType === 'feature' ? 'Feature Leakage' : finding.leakageType === 'temporal' ? 'Temporal Leakage' : 'Pipeline Leakage'}
-              </span>
+              <ConfidenceBadge confidence={finding.confidence} />
               {finding.humanReviewRequired && (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-medium">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (finding.escalateReason) setShowEscalate(true);
+                  }}
+                  className="text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-medium hover:bg-blue-100 transition-colors"
+                >
                   Human review required
-                </span>
+                </button>
               )}
             </div>
           </div>
@@ -902,7 +966,15 @@ function FindingItem({
             </h4>
             <ul className="space-y-3">
               {finding.evidence.map((item, idx) => (
-                <EvidenceRow key={idx} item={item} />
+                <li key={idx} className="flex flex-col gap-1.5">
+                  <div className="flex items-start gap-3 text-sm text-[var(--foreground)]">
+                    <span className="text-[var(--accent-primary)] mt-1 font-bold flex-shrink-0">•</span>
+                    <span className="leading-relaxed">{item.claim}</span>
+                  </div>
+                  <div className="ml-5">
+                    <SourceBadge filename={item.source.filename} location={item.source.location} />
+                  </div>
+                </li>
               ))}
             </ul>
           </div>
@@ -1007,71 +1079,6 @@ function LeakageFilterBar({
         );
       })}
     </div>
-  );
-}
-
-function EvidenceRow({ item }: { item: EvidenceCitation }) {
-  const [expanded, setExpanded] = useState(false);
-
-  if (!item.text?.trim()) return null;
-
-  const hasLabel = Boolean(item.citation_label?.trim());
-  const isCode = item.source_type === 'preprocessing_code' || item.source_type === 'model_training_code';
-  const isCsv = item.source_type === 'csv_header';
-
-  return (
-    <li>
-      <div className="flex items-start gap-3 text-sm text-[var(--foreground)]">
-        <span className="text-[var(--accent-primary)] mt-0.5 font-bold flex-shrink-0">•</span>
-        <span className="leading-relaxed">{item.text}</span>
-      </div>
-
-      {hasLabel && (
-        <div className="ml-6 mt-1.5">
-          <button
-            type="button"
-            onClick={() => setExpanded(!expanded)}
-            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EFF3F8] text-[#64748B] text-xs cursor-pointer hover:bg-[#E2E8F0] transition-colors"
-          >
-            <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M4 1h8a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1zm0 1v12h8V2H4zm1 2h6v1H5V4zm0 2.5h6v1H5v-1zm0 2.5h4v1H5V9z" />
-            </svg>
-            <span>{item.citation_label}</span>
-            <ChevronDown className={`w-3 h-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-          </button>
-
-          {expanded && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mt-2 overflow-hidden"
-            >
-              {isCode ? (
-                <pre className="bg-[#1E293B] text-[#E2E8F0] p-4 rounded-lg text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed">
-                  {item.citation_detail}
-                </pre>
-              ) : isCsv ? (
-                <div className="flex flex-wrap gap-2 p-3 rounded-lg border border-[var(--border)] bg-[#fafbfc]">
-                  {item.citation_detail.split(', ').map((col, i) => (
-                    <span
-                      key={i}
-                      className="bg-[#E2E8F0] px-2 py-1 rounded text-xs font-mono text-[var(--foreground)]"
-                    >
-                      {col}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <div className="border-l-2 border-[#94A3B8] pl-4 text-sm text-[#64748B] italic leading-relaxed">
-                  {item.citation_detail}
-                </div>
-              )}
-            </motion.div>
-          )}
-        </div>
-      )}
-    </li>
   );
 }
 

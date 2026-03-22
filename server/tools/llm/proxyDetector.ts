@@ -1,4 +1,4 @@
-import { AuditRequest, AuditFinding } from "../../../src/types";
+import { AuditRequest, AuditFinding, EvidenceItem } from "../../../src/types";
 import { callOpenAIJson } from "../../openaiClient";
 
 export async function detectProxyLeakage(
@@ -38,7 +38,16 @@ Respond in this exact JSON format:
       "feature_name": "...",
       "is_proxy": true or false,
       "reasoning": "one sentence explanation",
-      "confidence": "high" or "medium" or "low"
+      "confidence": "high" or "medium" or "low",
+      "evidence": [
+        {
+          "claim": "one concrete factual observation",
+          "source": {
+            "filename": "dataset.csv",
+            "location": "column name or row range (e.g. column 'feature_name', rows 1-N)"
+          }
+        }
+      ]
     }
   ]
 }`;
@@ -57,8 +66,22 @@ Respond in this exact JSON format:
       low: "medium",
     };
 
-    const reasoning = String(item.reasoning || "LLM detected proxy leakage risk.");
+    const rawEvidence = (item.evidence as Array<Record<string, unknown>>) ?? [];
     const featureName = String(item.feature_name ?? "unknown");
+    const evidence: EvidenceItem[] = rawEvidence.length > 0
+      ? rawEvidence.map((e) => ({
+          claim: String((e.claim as string) ?? item.reasoning ?? "Proxy leakage risk detected"),
+          source: {
+            filename: String(((e.source as Record<string, unknown>)?.filename) ?? "dataset.csv"),
+            location: String(((e.source as Record<string, unknown>)?.location) ?? `column '${item.feature_name}'`),
+          },
+        }))
+      : [
+          {
+            claim: String(item.reasoning ?? "LLM detected proxy leakage risk."),
+            source: { filename: "dataset.csv", location: `column '${item.feature_name}'` },
+          },
+        ];
 
     findings.push({
       id: `proxy-${featureName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
@@ -68,14 +91,7 @@ Respond in this exact JSON format:
       severity: (severityMap[conf] ?? "medium") as AuditFinding["severity"],
       confidence: conf as AuditFinding["confidence"],
       flagged_object: featureName,
-      evidence: [
-        {
-          text: reasoning,
-          source_type: "llm_reasoning" as const,
-          citation_label: "LLM semantic analysis",
-          citation_detail: reasoning,
-        },
-      ],
+      evidence,
       why_it_matters:
         "The model may be reading the answer key instead of learning predictive patterns.",
       fix_recommendation: [

@@ -1,6 +1,5 @@
-import { AuditRequest, AuditFinding } from "../../../src/types";
+import { AuditRequest, AuditFinding, EvidenceItem } from "../../../src/types";
 import { CodeAuditResult } from "../llm/codeAuditor";
-import { codeEvidence, csvEvidence } from "../../utils";
 
 export function structuralCheck(
   request: AuditRequest,
@@ -38,6 +37,20 @@ export function structuralCheck(
   }
 
   if (splitIsRandom) {
+    const structEvidence: EvidenceItem[] = [
+      {
+        claim: "Split method identified as random.",
+        source: { filename: "preprocessing_code.py", location: "train_test_split call" },
+      },
+      {
+        claim: `Likely entity keys: ${entityKeys.join(", ")}.`,
+        source: { filename: "dataset.csv", location: `columns: ${entityKeys.join(", ")}` },
+      },
+      {
+        claim: "Random split does not respect entity boundaries.",
+        source: { filename: "preprocessing_code.py", location: "train_test_split call" },
+      },
+    ];
     findings.push({
       id: "structural-entity-leakage",
       title: "Entity-level leakage detected in train/test split",
@@ -46,31 +59,10 @@ export function structuralCheck(
       severity: "high",
       confidence,
       flagged_object: entityKeys.join(", "),
-      evidence: [
-        codeEvidence(
-          "Split method identified as random.",
-          "preprocessing_code",
-          request.preprocessing_code,
-          "train_test_split",
-        ),
-        csvEvidence(
-          `Likely entity keys: ${entityKeys.join(", ")}.`,
-          entityKeys,
-        ),
-        {
-          text: "Random split does not respect entity boundaries.",
-          source_type: codeAuditResult ? "preprocessing_code" : "csv_header",
-          citation_label: codeAuditResult ? "code audit: split method" : "CSV header inference",
-          citation_detail: codeAuditResult
-            ? `Code audit detected split method: ${codeAuditResult.split_method}`
-            : `Entity ID columns inferred from CSV headers: ${entityKeys.join(", ")}`,
-        },
-      ],
+      evidence: structEvidence,
       why_it_matters:
         "Model learns entity identity rather than generalizable patterns.",
-      fix_recommendation: [
-        `Use GroupKFold with group key = ${entityKeys[0]}.`,
-      ],
+      fix_recommendation: [`Use GroupKFold with group key = ${entityKeys[0]}.`],
       needs_human_review: false,
     });
   }
