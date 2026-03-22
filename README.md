@@ -164,10 +164,7 @@ Below matches what those zips actually contain (synthetic data for demos only).
 ---
 
 ## Team
-Youzhu Jin
-Dennis Wang
-Wendy
-Michael Meng
+Youzhu Jin, Dennis Wang, Weicong Wang, Michael Meng
 
 ---
 
