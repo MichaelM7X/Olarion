@@ -1,7 +1,7 @@
 import { motion } from 'motion/react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowRight, Upload, FileText, Code, AlertCircle, Clock, Network, Layers, Archive, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowRight, Upload, FileText, Code, AlertCircle, Clock, Network, Layers, Archive, CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
 import JSZip from 'jszip';
 import { Navigation } from '../components/Navigation';
 import { Footer } from '../components/Footer';
@@ -9,6 +9,14 @@ import { FloatingChat } from '../components/FloatingChat';
 import { AmbientBackground } from '../components/AmbientBackground';
 import { extractCsvColumns } from '../lib/csv';
 import type { AuditRequest } from '../../types';
+import {
+  LEGAL_CLEAN_CSV,
+  LEGAL_CLEAN_PREPROCESSING,
+  LEGAL_CLEAN_CONFIG,
+  LEGAL_LEAKY_CSV,
+  LEGAL_LEAKY_PREPROCESSING,
+  LEGAL_LEAKY_CONFIG,
+} from '../../data/legalQuickFill';
 
 export function AuditSetup() {
   const navigate = useNavigate();
@@ -140,6 +148,29 @@ export function AuditSetup() {
     preprocessingCode.trim() !== '' &&
     !isSubmitting;
 
+  const applyLegalQuickFill = (
+    csv: string,
+    preprocessing: string,
+    config: { prediction_goal: string; target_column: string; csv_filename: string },
+  ) => {
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const file = new File([blob], config.csv_filename, { type: 'text/csv' });
+    setDatasetFile(file);
+    setTaskDescription(config.prediction_goal);
+    setTargetColumn(config.target_column);
+    setPreprocessingCode(preprocessing);
+    setTrainingCode('');
+    setSubmitError(null);
+  };
+
+  const handleLegalCleanQuickFill = () => {
+    applyLegalQuickFill(LEGAL_CLEAN_CSV, LEGAL_CLEAN_PREPROCESSING, LEGAL_CLEAN_CONFIG);
+  };
+
+  const handleLegalLeakyQuickFill = () => {
+    applyLegalQuickFill(LEGAL_LEAKY_CSV, LEGAL_LEAKY_PREPROCESSING, LEGAL_LEAKY_CONFIG);
+  };
+
   const fadeUpVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0 },
@@ -173,6 +204,24 @@ export function AuditSetup() {
             <p className="text-base text-[var(--muted-foreground)] max-w-2xl">
               Provide your prediction task details and data artifacts.
             </p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={handleLegalCleanQuickFill}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border)]/60 bg-white/60 hover:bg-white hover:border-[var(--accent-primary)]/40 text-sm text-[var(--foreground)] transition-colors"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                Quick Fill: Legal (clean)
+              </button>
+              <button
+                type="button"
+                onClick={handleLegalLeakyQuickFill}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-amber-500/35 bg-amber-500/5 hover:bg-amber-500/10 hover:border-amber-500/50 text-sm text-[var(--foreground)] transition-colors"
+              >
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                Quick Fill: Legal (leaky)
+              </button>
+            </div>
           </motion.div>
 
           <div className="grid grid-cols-3 gap-8">

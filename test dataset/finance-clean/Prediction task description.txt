@@ -1,0 +1,1 @@
+Predict whether a loan applicant will default on their loan based on financial profile and credit history.
