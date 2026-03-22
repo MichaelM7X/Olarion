@@ -65,19 +65,26 @@ const severityRank: Record<Severity, number> = {
   low: 3,
 };
 
-type LocationState = { request?: AuditRequest } | null | undefined;
+type LocationState = {
+  request?: AuditRequest;
+  report?: AuditReport;
+  fromHistory?: boolean;
+} | null | undefined;
 
 export function AuditResults() {
   const location = useLocation();
   const navigate = useNavigate();
-  const request = (location.state as LocationState)?.request;
+  const state = location.state as LocationState;
+  const request = state?.request;
+  const savedReport = state?.report;
+  const fromHistory = state?.fromHistory ?? false;
 
-  const [report, setReport] = useState<AuditReport | null>(null);
+  const [report, setReport] = useState<AuditReport | null>(savedReport ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(Boolean(request));
+  const [loading, setLoading] = useState(Boolean(request) && !savedReport);
 
   useEffect(() => {
-    if (!request) {
+    if (savedReport || !request) {
       setLoading(false);
       return;
     }
@@ -112,7 +119,7 @@ export function AuditResults() {
     return () => {
       cancelled = true;
     };
-  }, [request]);
+  }, [request, savedReport]);
 
   const findings = useMemo(
     () => (report ? report.findings.map(mapFinding) : []),
