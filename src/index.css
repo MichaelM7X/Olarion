@@ -847,3 +847,13 @@ button {
     align-items: flex-start;
   }
 }
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.thinking-indicator {
+  animation: blink 1.2s ease-in-out infinite;
+  color: var(--text-muted, #888);
+}

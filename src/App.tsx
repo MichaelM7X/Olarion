@@ -1,6 +1,7 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { demoCases } from "./data/demoCases";
 import { answerQuestion, auditRequest, parseCsvHeader } from "./lib/auditEngine";
+import { auditWithLLM, chatWithLLM } from "./lib/llmEngine";
 import { AgentMessage, AuditFinding, AuditReport, AuditRequest, DemoCaseConfig } from "./types";
 
 const traceSteps = [
@@ -85,6 +86,8 @@ export default function App() {
   const [traceIndex, setTraceIndex] = useState(traceSteps.length);
   const [lastRunLabel, setLastRunLabel] = useState("Ready");
   const [copyStatus, setCopyStatus] = useState("");
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const pendingReportRef = useRef<Promise<AuditReport> | null>(null);
 
   useEffect(() => {
     const nextRequest = cloneRequest(activeCase.default_inputs);
@@ -111,25 +114,46 @@ export default function App() {
       return () => window.clearTimeout(timer);
     }
 
-    const nextReport = auditRequest(request, activeCase);
-    setReport(nextReport);
-    setSelectedFindingId(nextReport.findings[0]?.id ?? null);
-    setChatMessages((currentMessages) => [
-      ...currentMessages,
-      {
-        role: "assistant",
-        content: `Audit finished. ${nextReport.summary}`,
-      },
-    ]);
-    setIsRunning(false);
-    setLastRunLabel(
-      `Last audited at ${new Date().toLocaleTimeString([], {
-        hour: "numeric",
-        minute: "2-digit",
-      })}`,
-    );
+    // Animation complete — await the LLM result (or fall back to rule engine)
+    let cancelled = false;
 
-    return undefined;
+    const finish = async () => {
+      let nextReport: AuditReport;
+      try {
+        if (pendingReportRef.current) {
+          nextReport = await pendingReportRef.current;
+          pendingReportRef.current = null;
+        } else {
+          nextReport = auditRequest(request, activeCase);
+        }
+      } catch {
+        nextReport = auditRequest(request, activeCase);
+      }
+
+      if (cancelled) return;
+
+      setReport(nextReport);
+      setSelectedFindingId(nextReport.findings[0]?.id ?? null);
+      setChatMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          role: "assistant",
+          content: `Audit finished. ${nextReport.summary}`,
+        },
+      ]);
+      setIsRunning(false);
+      setLastRunLabel(
+        `Last audited at ${new Date().toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit",
+        })}`,
+      );
+    };
+
+    void finish();
+    return () => {
+      cancelled = true;
+    };
   }, [activeCase, isRunning, request, traceIndex]);
 
   const selectedFinding =
@@ -138,6 +162,10 @@ export default function App() {
     null;
 
   const runAudit = () => {
+    // Start LLM call immediately; animation plays in parallel
+    pendingReportRef.current = auditWithLLM(request).catch(() =>
+      auditRequest(request, activeCase),
+    );
     setIsRunning(true);
     setTraceIndex(0);
     setCopyStatus("");
@@ -212,26 +240,50 @@ export default function App() {
   const handleChatSubmit = (event: FormEvent) => {
     event.preventDefault();
     const trimmed = chatInput.trim();
-    if (!trimmed) {
+    if (!trimmed || isChatLoading) {
       return;
     }
 
-    const response = answerQuestion(trimmed, report, activeCase);
     setChatMessages((currentMessages) => [
       ...currentMessages,
       { role: "user", content: trimmed },
-      { role: "assistant", content: response },
     ]);
     setChatInput("");
+    setIsChatLoading(true);
+
+    chatWithLLM(trimmed, report, request, chatMessages)
+      .catch(() => answerQuestion(trimmed, report, activeCase))
+      .then((response) => {
+        setChatMessages((currentMessages) => [
+          ...currentMessages,
+          { role: "assistant", content: response },
+        ]);
+      })
+      .finally(() => {
+        setIsChatLoading(false);
+      });
   };
 
   const handlePromptStarter = (prompt: string) => {
-    const response = answerQuestion(prompt, report, activeCase);
+    if (isChatLoading) return;
+
     setChatMessages((currentMessages) => [
       ...currentMessages,
       { role: "user", content: prompt },
-      { role: "assistant", content: response },
     ]);
+    setIsChatLoading(true);
+
+    chatWithLLM(prompt, report, request, chatMessages)
+      .catch(() => answerQuestion(prompt, report, activeCase))
+      .then((response) => {
+        setChatMessages((currentMessages) => [
+          ...currentMessages,
+          { role: "assistant", content: response },
+        ]);
+      })
+      .finally(() => {
+        setIsChatLoading(false);
+      });
   };
 
   const downloadReport = () => {
@@ -722,6 +774,12 @@ export default function App() {
                   <p>{message.content}</p>
                 </article>
               ))}
+              {isChatLoading && (
+                <article className="chat-bubble chat-assistant">
+                  <span>LeakGuard</span>
+                  <p className="thinking-indicator">Thinking…</p>
+                </article>
+              )}
             </div>
 
             <form className="chat-form" onSubmit={handleChatSubmit}>
@@ -730,9 +788,10 @@ export default function App() {
                 value={chatInput}
                 onChange={(event) => setChatInput(event.target.value)}
                 placeholder="Ask why a finding is leaky, what to fix, or what metadata is missing."
+                disabled={isChatLoading}
               />
-              <button className="primary-button" type="submit">
-                Ask
+              <button className="primary-button" type="submit" disabled={isChatLoading}>
+                {isChatLoading ? "…" : "Ask"}
               </button>
             </form>
           </section>
