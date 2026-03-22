@@ -343,7 +343,7 @@ export async function reviewAgent(
   );
   const featureList = featureColumns.map((f) => `- ${f}`).join("\n");
 
-  const systemPrompt = `You are the Review Agent for Clarion, an ML pipeline auditor.
+  const systemPrompt = `You are the Review Agent for Olarion, an ML pipeline auditor.
 
 Phase 1 of the audit has completed. Your job is to review the initial findings and decide 
 if any additional checks are needed. You have access to tools for:

@@ -1,1 +1,1 @@
-Predict whether a patient will develop Type 2 diabetes within 5 years based on clinical measurements.
+Predict whether a hospitalized adult will meet criteria for sepsis or septic shock within the first 24 hours of an emergency department encounter, using only information that would be available at the time clinicians must decide on early escalation (triage through early ED course).

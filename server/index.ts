@@ -117,5 +117,5 @@ Rules:
 
 const PORT = process.env.PORT ?? 3001;
 app.listen(Number(PORT), () => {
-  console.log(`Clarion API running on http://localhost:${PORT}`);
+  console.log(`Olarion API running on http://localhost:${PORT}`);
 });

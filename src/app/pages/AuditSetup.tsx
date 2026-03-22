@@ -204,6 +204,7 @@ export function AuditSetup() {
             <p className="text-base text-[var(--muted-foreground)] max-w-2xl">
               Provide your prediction task details and data artifacts.
             </p>
+            {/* Quick Fill buttons hidden for now
             <div className="mt-4 flex flex-wrap gap-3">
               <button
                 type="button"
@@ -222,6 +223,7 @@ export function AuditSetup() {
                 Quick Fill: Legal (leaky)
               </button>
             </div>
+            */}
           </motion.div>
 
           <div className="grid grid-cols-3 gap-8">

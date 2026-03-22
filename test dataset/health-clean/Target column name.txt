@@ -1,1 +1,1 @@
-developed_diabetes
+sepsis_within_24h
